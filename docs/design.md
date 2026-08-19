@@ -10,10 +10,11 @@ the simulator. That decision buys three things:
 - Faults are testable in CI without a GPU.
 - The filter under test is the real one, wired the real way. Nothing is stubbed.
 
-The cost is that faults are applied to *messages*, not to physics. Wheel slip
-here corrupts the encoder reading; it does not actually make the tyres lose
-grip. For localisation testing that distinction does not matter, because the
-filter only ever sees the message. For controller testing it would.
+The cost is that faults are applied to *messages*, not to physics. `wheel_slip`
+corrupts the encoder reading; it does not actually make the tyres lose grip. To
+a filter fed only that message the two look much alike, which is why the shim is
+enough for most of this suite. Terrain is the deliberate exception, and it lives
+in the simulator for the reason given below.
 
 ## Why a headless simulator at all
 
@@ -113,11 +114,38 @@ than a kinematic limit — a unicycle can spin in place — and only becomes a r
 constraint once the trailer is modelled, which is why the planner is Hybrid-A*
 and not Navfn.
 
+## Why terrain is in the simulator, not the shim
+
+Every other fault here is a lie told to the filter. Terrain is not: the wheels
+turn at the commanded rate, the encoders report that honestly, and the ground
+declines to convert it into motion. No shim between the sensors and the filter
+can produce that, because the robot's true position has to change.
+
+It is also the only fault in the suite with no cross-check available. A spoofed
+fix disagrees with the wheels. A dead gyro stops saying anything. Slip produces
+a consistent, plausible and entirely honest set of messages that happen to
+describe a robot which is somewhere else.
+
+`terrain_dropout` measures the consequence against an otherwise identical flat
+run: 9.57 m of position error instead of 0.36 m, with heading error inside the
+same bound, because heading comes from the gyro and the gyro is not wrong. The
+spread across seeds falls from sd 0.25 to sd 0.022 — flat dead reckoning is a
+random walk over the noise draws, slip is a bias.
+
+The model is traction only: a scalar in (0, 1] per rectangular patch, scaling
+forward and yaw rate together. There is no slope, so there is no downhill drift
+and the nonholonomic constraint the filter now fuses stays true. Adding height
+would break that constraint, which is the more interesting experiment and the
+reason traction lives in its own module rather than three lines in the step
+function.
+
 ## Known gaps
 
 - No innovation gating, so `gnss_spoof` is followed rather than rejected.
-- Faults are message-level, not physical.
+- Sensor faults are message-level. Terrain is the one physical fault, and it is
+  traction only: no slope, no load transfer, no lateral drift.
 - `Project/` builds and the Editor runs on the GPU, but no level is authored, so
   nothing yet drives the ROS 2 Gem from the O3DE side.
-- The vehicle model is a unicycle with no dynamics, slip, or terrain, so the
-  commanded velocity is always achieved and navigation cannot fail physically.
+- Nothing yet measures navigation. The terrain that makes the robot miss its
+  commanded velocity is in the simulator, but the scorer still only reports
+  localisation error, so Nav2's behaviour over it is unmeasured.

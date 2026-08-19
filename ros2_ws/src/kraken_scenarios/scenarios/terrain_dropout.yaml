@@ -1,0 +1,40 @@
+name: terrain_dropout
+profile: robust
+seed: 0
+description: >
+  total_gnss_dropout run over wet ground. Every phase is identical; the only
+  difference is that the far half of the field has 0.45 traction, so the wheels
+  turn at the commanded rate and the robot does not go that far. No sensor is
+  faulty and no message is wrong, which is exactly why the filter cannot catch
+  it: the encoders honestly report wheels that really are spinning.
+
+terrain:
+  default: 1.0
+  patches:
+    - {x: [13.0, 60.0], y: [-25.0, 25.0], traction: 0.45}
+
+phases:
+  - {label: settle, duration: 15.0, linear: 0.8, angular: 0.0}
+  - {label: mark, action: mark_reference}
+  - {label: kill_gnss, action: set_fault, channel: gnss, mode: dropout}
+  - {label: straight, duration: 10.0, linear: 0.8, angular: 0.0}
+  - {label: turning, duration: 30.0, linear: 0.8, angular: 0.25}
+
+# Measured over 8 seeds: worst position 9.539-9.603 m (mean 9.565, sd 0.022),
+# worst heading 0.60-2.84 deg. total_gnss_dropout, which differs only in the
+# terrain block, gives 0.14-0.90 m with the same heading bound.
+#
+# The spread is 10x tighter than the flat case even though the error is 26x
+# larger: dead reckoning over flat ground is a random walk over the noise draws,
+# while this is a systematic bias, so the seed barely matters.
+#
+# max_position_error is a regression bound. min_position_error is the point: if
+# this stops failing, the terrain model has stopped doing anything. The heading
+# bound is the same 8 deg the flat case passes, which is what makes the case
+# that heading metrics cannot see this.
+expect:
+  min_position_error: 5.0
+  max_position_error: 15.0
+  max_heading_error_deg: 8.0
+  min_path_length: 12.0
+  min_path_rotation_deg: 150.0

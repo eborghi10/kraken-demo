@@ -48,7 +48,7 @@ git clone <your fork> kraken-demo && cd kraken-demo
 docker compose -f docker/docker-compose.yml run --rm test
 ```
 
-That builds the workspace and runs all six scenarios. To poke at it by hand:
+That builds the workspace and runs all seven scenarios. To poke at it by hand:
 
 ```bash
 docker compose -f docker/docker-compose.yml run --rm stack
@@ -93,15 +93,27 @@ would happily call it a pass.
 | `gnss_spoof` | fix walks off at 0.2 m/s, covariance still tight | **follows the spoof** (known gap) |
 | `imu_dropout` | gyro dies, GNSS healthy | position bounded, heading lags then recovers |
 | `wheel_slip` | encoders report 2× the real motion | stays localised |
+| `terrain_dropout` | fix lost *and* the ground is slippery | **drifts 9.6 m** while heading stays under 3° |
 
-Thresholds live in the scenario files, each annotated with the values actually
-measured over three runs. Add a failure mode by adding a YAML file; no Python
-required. See [docs/faults.md](docs/faults.md) for what each injector mode does
-and [docs/design.md](docs/design.md) for why it is built this way.
+Thresholds live in the scenario files, each annotated with the distribution
+actually measured over an eight-seed sweep. Add a failure mode by adding a YAML
+file; no Python required. See [docs/faults.md](docs/faults.md) for what each
+injector mode does and [docs/design.md](docs/design.md) for why it is built this
+way.
 
-Two scenarios assert *failure* on purpose. `gnss_spoof` documents a real gap —
+Three scenarios assert *failure* on purpose. `gnss_spoof` documents a real gap —
 the filter has no innovation gate, so a confident lie is a trusted lie. Better
 to have it red and visible than assumed and absent.
+
+`terrain_dropout` is the same run as `total_gnss_dropout` with one field
+changed, and it is the interesting one. Every sensor is healthy and every
+message is honest: the wheels really are turning at the commanded rate, the
+encoders really do report that, and the robot simply does not get there. There
+is no disagreement between sources for a filter to detect, so cross-checking
+cannot help, and the error is 26× the flat case while the heading error stays
+inside the bound the flat case passes. It also has a *tenth* the spread, because
+dead reckoning over flat ground is a random walk while this is a systematic
+bias.
 
 ## Simulation
 

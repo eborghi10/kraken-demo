@@ -5,6 +5,7 @@ The interactive launch file and the automated tests must bring up byte-for-byte
 the same stack, otherwise a green test says nothing about what you see when you
 run the demo by hand. Both go through here.
 """
+import json
 import os
 
 import yaml
@@ -57,6 +58,9 @@ def scenario_actions(name, report='', simulator='headless', seed=None):
                     'use_sim_time': False,
                     'seed': seed,
                     'real_time_factor': float(scenario.get('real_time_factor', 3.0)),
+                    # Flat ground unless the scenario says otherwise, so adding
+                    # terrain cannot move the numbers of scenarios without it.
+                    'terrain': json.dumps(scenario['terrain']) if 'terrain' in scenario else '',
                 }],
             )
         )

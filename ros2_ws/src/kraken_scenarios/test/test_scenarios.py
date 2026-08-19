@@ -23,6 +23,7 @@ SCENARIOS = [
     'gnss_spoof',
     'imu_dropout',
     'wheel_slip',
+    'terrain_dropout',
 ]
 
 REPORT_DIR = os.environ.get('KRAKEN_REPORT_DIR', '/tmp/kraken_reports')

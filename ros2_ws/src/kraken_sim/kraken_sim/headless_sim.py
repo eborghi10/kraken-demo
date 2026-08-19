@@ -23,6 +23,8 @@ from rclpy.qos import QoSDurabilityPolicy, QoSHistoryPolicy, QoSProfile, QoSReli
 from rosgraph_msgs.msg import Clock
 from sensor_msgs.msg import Imu, NavSatFix, NavSatStatus
 
+from kraken_sim.terrain import TractionField
+
 EARTH_RADIUS_M = 6378137.0
 
 
@@ -53,6 +55,9 @@ class HeadlessSim(Node):
         self.declare_parameter('wheel_lateral_slip_stddev', 0.01)
         self.declare_parameter('wheel_scale_error', 1.01)
         self.declare_parameter('cmd_vel_timeout', 1.0)
+        # JSON, because a ROS 2 parameter cannot carry a list of dicts. Empty
+        # means uniform traction, which reproduces the original flat model.
+        self.declare_parameter('terrain', '')
 
         self.declare_parameter('world_frame', 'world')
         self.declare_parameter('odom_frame', 'odom')
@@ -73,6 +78,7 @@ class HeadlessSim(Node):
         self._wheel_sigma = self.get_parameter('wheel_speed_noise_stddev').value
         self._wheel_lateral_sigma = self.get_parameter('wheel_lateral_slip_stddev').value
         self._wheel_scale = self.get_parameter('wheel_scale_error').value
+        self._terrain = TractionField.from_json(self.get_parameter('terrain').value)
 
         # Integer nanoseconds so the published clock never accumulates drift.
         self._dt_ns = int(1e9 / self._rate)
@@ -106,8 +112,9 @@ class HeadlessSim(Node):
 
         self.create_timer(self._dt / self._rtf, self._step)
         self.get_logger().info(
-            'headless sim at %.0f Hz, %.1fx real time, datum %.6f %.6f'
-            % (self._rate, self._rtf, self._datum[0], self._datum[1]))
+            'headless sim at %.0f Hz, %.1fx real time, datum %.6f %.6f, terrain %s'
+            % (self._rate, self._rtf, self._datum[0], self._datum[1],
+               'uniform' if self._terrain.uniform else 'patched'))
 
     def _on_cmd_vel(self, msg):
         self._cmd_v = msg.linear.x
@@ -131,10 +138,16 @@ class HeadlessSim(Node):
         v = 0.0 if stale else self._cmd_v
         w = 0.0 if stale else self._cmd_w
 
-        self._x += v * math.cos(self._yaw) * self._dt
-        self._y += v * math.sin(self._yaw) * self._dt
-        self._yaw = math.atan2(math.sin(self._yaw + w * self._dt),
-                               math.cos(self._yaw + w * self._dt))
+        # The wheels turn at the commanded rate wherever the robot is; the
+        # ground decides how much of that becomes motion.
+        traction = self._terrain.traction_at(self._x, self._y)
+        v_true = v * traction
+        w_true = w * traction
+
+        self._x += v_true * math.cos(self._yaw) * self._dt
+        self._y += v_true * math.sin(self._yaw) * self._dt
+        self._yaw = math.atan2(math.sin(self._yaw + w_true * self._dt),
+                               math.cos(self._yaw + w_true * self._dt))
 
         # Wheel odometry sees a slightly wrong wheel radius plus noise, which is
         # what makes it drift without bound once GNSS stops correcting it.
@@ -145,11 +158,11 @@ class HeadlessSim(Node):
         self._odom_yaw += w_wheel * self._dt
 
         self._tick += 1
-        self._publish_truth(v, w)
+        self._publish_truth(v_true, w_true)
         if self._tick % self._gnss_every == 0:
             self._publish_gnss()
         if self._tick % self._imu_every == 0:
-            self._publish_imu(w)
+            self._publish_imu(w_true)
         if self._tick % self._wheel_every == 0:
             self._publish_wheel(v_wheel, w_wheel)
 
