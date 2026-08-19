@@ -24,10 +24,21 @@ def load_scenario(name):
         return yaml.safe_load(handle)
 
 
-def scenario_actions(name, report=''):
-    """Return (background actions, scenario runner action) for one scenario."""
+def scenario_actions(name, report='', simulator='headless', seed=None):
+    """Return (background actions, scenario runner action) for one scenario.
+
+    `simulator` picks who owns /clock and the sensor topics. 'headless' starts
+    kraken_sim; 'o3de' starts nothing and expects an already-running O3DE
+    launcher to satisfy the same topic contract (see Project/README.md).
+
+    `seed` overrides the scenario's own seed, which is how the sweep tool walks
+    a scenario across noise realisations.
+    """
+    if simulator not in ('headless', 'o3de'):
+        raise ValueError("simulator must be 'headless' or 'o3de', got %r" % (simulator,))
+
     scenario = load_scenario(name)
-    seed = scenario.get('seed', 0)
+    seed = scenario.get('seed', 0) if seed is None else int(seed)
     sim_time = {'use_sim_time': True}
 
     channels = os.path.join(
@@ -35,17 +46,22 @@ def scenario_actions(name, report=''):
     localisation = os.path.join(
         get_package_share_directory('kraken_localisation'), 'launch', 'localisation.launch.py')
 
-    background = [
-        # The simulator owns /clock, so it is the one node that must not consume it.
-        Node(
-            package='kraken_sim', executable='headless_sim', name='headless_sim',
-            output='screen',
-            parameters=[{
-                'use_sim_time': False,
-                'seed': seed,
-                'real_time_factor': float(scenario.get('real_time_factor', 3.0)),
-            }],
-        ),
+    background = []
+    if simulator == 'headless':
+        background.append(
+            # The simulator owns /clock, so it is the one node that must not consume it.
+            Node(
+                package='kraken_sim', executable='headless_sim', name='headless_sim',
+                output='screen',
+                parameters=[{
+                    'use_sim_time': False,
+                    'seed': seed,
+                    'real_time_factor': float(scenario.get('real_time_factor', 3.0)),
+                }],
+            )
+        )
+
+    background += [
         Node(
             package='kraken_faults', executable='fault_injector', name='fault_injector',
             output='screen', parameters=[channels, dict(sim_time, seed=seed)],

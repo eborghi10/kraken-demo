@@ -26,6 +26,7 @@ setup(
         'console_scripts': [
             'scorer = kraken_scenarios.scorer:main',
             'scenario_runner = kraken_scenarios.scenario_runner:main',
+            'sweep = kraken_scenarios.sweep:main',
         ],
     },
 )

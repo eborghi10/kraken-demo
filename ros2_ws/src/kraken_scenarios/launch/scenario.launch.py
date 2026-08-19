@@ -13,7 +13,9 @@ from kraken_scenarios.launch_utils import scenario_actions
 def _actions(context):
     name = LaunchConfiguration('scenario').perform(context)
     report = LaunchConfiguration('report').perform(context)
-    background, runner = scenario_actions(name, report)
+    simulator = LaunchConfiguration('simulator').perform(context)
+    seed = LaunchConfiguration('seed').perform(context)
+    background, runner = scenario_actions(name, report, simulator, seed or None)
     return background + [runner]
 
 
@@ -22,5 +24,10 @@ def generate_launch_description():
         DeclareLaunchArgument('scenario', default_value='total_gnss_dropout'),
         DeclareLaunchArgument('report', default_value='',
                               description='write a JSON result here when finished'),
+        DeclareLaunchArgument('simulator', default_value='headless',
+                              description="'headless' starts kraken_sim; 'o3de' expects "
+                                          'the O3DE launcher to be running already'),
+        DeclareLaunchArgument('seed', default_value='',
+                              description="override the scenario's noise seed"),
         OpaqueFunction(function=_actions),
     ])
