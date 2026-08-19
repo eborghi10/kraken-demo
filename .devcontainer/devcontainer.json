@@ -1,0 +1,60 @@
+// SPDX-License-Identifier: BSD-3-Clause
+//
+// Reuses the `dev` stage of docker/Dockerfile.Stack, so the devcontainer and CI
+// share one dependency list. The repository is mounted at /data/workspace to
+// match the paths used by docker-compose.yml and the images.
+{
+  "name": "kraken-demo (ROS 2 Jazzy)",
+
+  "build": {
+    "context": "..",
+    "dockerfile": "../docker/Dockerfile.Stack",
+    "target": "dev"
+  },
+
+  "workspaceMount": "source=${localWorkspaceFolder},target=/data/workspace,type=bind",
+  "workspaceFolder": "/data/workspace",
+  "remoteUser": "ubuntu",
+
+  // host networking and IPC match docker-compose.yml; the X11 socket is there
+  // so rviz2 and rqt_plot work.
+  "runArgs": ["--network=host", "--ipc=host"],
+  "mounts": ["source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind"],
+  "containerEnv": {
+    "DISPLAY": "${localEnv:DISPLAY}"
+  },
+
+  "postCreateCommand": ".devcontainer/post-create.sh",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-iot.vscode-ros",
+        "redhat.vscode-yaml",
+        "ms-azuretools.vscode-docker"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/bin/python3",
+        "python.analysis.extraPaths": [
+          "/opt/ros/jazzy/lib/python3.12/site-packages",
+          "${workspaceFolder}/ros2_ws/src/kraken_faults",
+          "${workspaceFolder}/ros2_ws/src/kraken_scenarios",
+          "${workspaceFolder}/ros2_ws/src/kraken_sim"
+        ],
+        "python.testing.pytestEnabled": false,
+        "files.watcherExclude": {
+          "**/build/**": true,
+          "**/install/**": true,
+          "**/log/**": true
+        },
+        "search.exclude": {
+          "**/build": true,
+          "**/install": true,
+          "**/log": true
+        }
+      }
+    }
+  }
+}
