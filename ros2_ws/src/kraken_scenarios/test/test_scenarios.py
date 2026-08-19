@@ -24,6 +24,8 @@ SCENARIOS = [
     'imu_dropout',
     'wheel_slip',
     'terrain_dropout',
+    'nav_baseline',
+    'nav_terrain_dropout',
 ]
 
 REPORT_DIR = os.environ.get('KRAKEN_REPORT_DIR', '/tmp/kraken_reports')
@@ -44,6 +46,15 @@ CHECKS = {
     'min_position_error': ('worst_position_error', lambda got, want: got > want, 'above'),
     'min_path_length': ('path_length', lambda got, want: got > want, 'above'),
     'min_path_rotation_deg': ('path_rotation_deg', lambda got, want: got > want, 'above'),
+    # Navigation. `goal_error_estimated` is what the robot believes, and
+    # `goal_error_true` is where it actually is; a scenario can require the two
+    # to disagree, which is how a silent navigation failure gets asserted.
+    'expect_navigation_succeeded': (
+        'navigation_succeeded', lambda got, want: got == want, 'equal to'),
+    'max_goal_error_true': ('goal_error_true', lambda got, want: got < want, 'below'),
+    'min_goal_error_true': ('goal_error_true', lambda got, want: got > want, 'above'),
+    'max_goal_error_estimated': (
+        'goal_error_estimated', lambda got, want: got < want, 'below'),
 }
 
 

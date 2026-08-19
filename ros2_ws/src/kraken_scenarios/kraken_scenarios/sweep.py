@@ -30,6 +30,11 @@ METRICS = (
     'heading_error_deg',
     'path_length',
     'path_rotation_deg',
+    # Only present for scenarios that navigate; summarise skips what is absent.
+    'navigation_succeeded',
+    'navigation_time_s',
+    'goal_error_estimated',
+    'goal_error_true',
 )
 
 

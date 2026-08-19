@@ -10,12 +10,14 @@
   <exec_depend>rclpy</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>nav2_msgs</exec_depend>
   <exec_depend>std_srvs</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>kraken_interfaces</exec_depend>
   <exec_depend>kraken_faults</exec_depend>
   <exec_depend>kraken_localisation</exec_depend>
+  <exec_depend>kraken_nav</exec_depend>
   <exec_depend>kraken_sim</exec_depend>
 
   <test_depend>launch_testing</test_depend>

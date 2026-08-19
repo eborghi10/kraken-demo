@@ -1,0 +1,26 @@
+name: nav_baseline
+profile: robust
+seed: 0
+navigation: true
+description: >
+  The control. Flat ground, a healthy fix, and one Nav2 goal 12 m out. Nav2
+  should report success and the robot should actually be there, which is what
+  makes the terrain run worth reading.
+
+phases:
+  - {label: settle, duration: 5.0, linear: 0.0, angular: 0.0}
+  - {label: mark, action: mark_reference}
+  - {label: goto, action: navigate_to, x: 12.0, y: 4.0, timeout: 120.0}
+
+# Measured over 8 seeds: goal_error_estimated 0.196 +/- 0.047 (max 0.252),
+# goal_error_true 0.229 +/- 0.069 (max 0.276), path_length 12.64 +/- 0.12,
+# navigation_time 25.78 +/- 0.27 s, succeeded 8/8.
+#
+# max_goal_error_true is the bound that matters: on good ground the robot is
+# where it says it is, so belief and truth are held to the same tolerance.
+expect:
+  expect_navigation_succeeded: 1.0
+  max_goal_error_estimated: 0.5
+  max_goal_error_true: 0.5
+  max_position_error: 0.4
+  min_path_length: 12.0

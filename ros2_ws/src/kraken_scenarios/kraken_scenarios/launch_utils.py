@@ -83,6 +83,16 @@ def scenario_actions(name, report='', simulator='headless', seed=None):
         ),
     ]
 
+    if scenario.get('navigation', False):
+        navigation = os.path.join(
+            get_package_share_directory('kraken_nav'), 'launch', 'navigation.launch.py')
+        background.append(
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(navigation),
+                launch_arguments={'use_sim_time': 'true'}.items(),
+            )
+        )
+
     runner = Node(
         package='kraken_scenarios', executable='scenario_runner', name='scenario_runner',
         output='screen',

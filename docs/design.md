@@ -139,6 +139,59 @@ would break that constraint, which is the more interesting experiment and the
 reason traction lives in its own module rather than three lines in the step
 function.
 
+## Why the goal error is scored twice
+
+The scorer reports `goal_error_estimated` and `goal_error_true` separately. The
+first is the distance from the goal to where the filter thinks the robot is; the
+second is the distance to where it actually is. On good ground the two agree and
+the pair looks redundant. That is the point of measuring both.
+
+Nav2 decides it has arrived by comparing the goal against the transform tree,
+which is fed by the filter. It has no other source of truth, so a goal check can
+only ever confirm that the estimate arrived. Anything that biases the estimate
+biases the arrival test by exactly the same amount, and the error cancels out of
+every number the robot can compute about itself.
+
+Terrain slip is such a bias. The wheels turn at the commanded rate and the
+encoders report that rate honestly, so with no fix to correct it the estimate
+advances at the commanded speed while the robot advances at 45% of it. Over the
+12.65 m goal used by `nav_baseline` and `nav_terrain_dropout`, across 8 seeds:
+
+| | flat, healthy fix | slippery, no fix |
+| --- | --- | --- |
+| `goal_error_estimated` | 0.196 +/- 0.047 | 0.215 +/- 0.096 |
+| `goal_error_true` | 0.229 +/- 0.069 | 5.239 +/- 0.107 |
+| `path_length` | 12.64 | 7.64 |
+| Nav2 reported success | 8/8 | 5/8 |
+
+The believed error is the same to well inside its own spread. The true error is
+23x worse. Every signal available to the robot -- the goal check, the filter
+covariance, the encoders, the heading, which stays under 3 degrees -- says the
+run went as well as the control run did. This is the second failure in this
+project that is invisible in heading and visible only in position; the first was
+the unobservable lateral velocity above, and both were found by scoring against
+ground truth rather than against the estimate.
+
+The spread is the other half of it. `goal_error_true` varies by 0.107 m across
+seeds while the flat case varies by 0.069 m, so the miss is not noise that a
+longer run would average out. It is a systematic bias, reproducible to the
+centimetre, which is what makes it dangerous rather than merely inaccurate.
+
+Nav2 is not wrong to report success, and it is worth being precise about that.
+It was asked to drive the estimate to a pose and it did. The failure is that
+nothing in the stack is positioned to notice the estimate and the robot have
+parted company, because the only instrument that could notice is the fix, and
+the scenario removed it.
+
+`nav_terrain_dropout` deliberately does not assert on `navigation_succeeded`.
+Nav2 returned SUCCEEDED in 5 of 8 runs and gave up in the other 3, and the
+variation comes from MPPI: its model assumes the commanded velocity is achieved,
+so on slippery ground its rollouts mispredict and it sometimes thrashes near the
+goal until the progress checker fires. Asserting either outcome would make the
+test flaky. The scenario asserts the two goal errors instead, which are stable,
+and the fact that a giving-up controller still believes it is centimetres from
+the goal is recorded here rather than in a threshold.
+
 ## Known gaps
 
 - No innovation gating, so `gnss_spoof` is followed rather than rejected.
@@ -146,6 +199,9 @@ function.
   traction only: no slope, no load transfer, no lateral drift.
 - `Project/` builds and the Editor runs on the GPU, but no level is authored, so
   nothing yet drives the ROS 2 Gem from the O3DE side.
-- Nothing yet measures navigation. The terrain that makes the robot miss its
-  commanded velocity is in the simulator, but the scorer still only reports
-  localisation error, so Nav2's behaviour over it is unmeasured.
+- The navigation scenarios score a single goal at the end of the run. There is
+  no cross-track error along the path and no stuck-and-recovery metric, so a
+  controller that wanders badly but arrives still scores clean.
+- Nothing detects the bias that `nav_terrain_dropout` demonstrates. Comparing
+  commanded velocity against a non-wheel measurement would do it, and the sim
+  has no such sensor yet.

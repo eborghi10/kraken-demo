@@ -48,7 +48,7 @@ git clone <your fork> kraken-demo && cd kraken-demo
 docker compose -f docker/docker-compose.yml run --rm test
 ```
 
-That builds the workspace and runs all seven scenarios. To poke at it by hand:
+That builds the workspace and runs all nine scenarios. To poke at it by hand:
 
 ```bash
 docker compose -f docker/docker-compose.yml run --rm stack
@@ -94,6 +94,8 @@ would happily call it a pass.
 | `imu_dropout` | gyro dies, GNSS healthy | position bounded, heading lags then recovers |
 | `wheel_slip` | encoders report 2× the real motion | stays localised |
 | `terrain_dropout` | fix lost *and* the ground is slippery | **drifts 9.6 m** while heading stays under 3° |
+| `nav_baseline` | none, one Nav2 goal 12.65 m out | arrives, and is really there |
+| `nav_terrain_dropout` | the same goal, fix lost, ground slippery | **believes it arrived, is 5.2 m short** |
 
 Thresholds live in the scenario files, each annotated with the distribution
 actually measured over an eight-seed sweep. Add a failure mode by adding a YAML
@@ -114,6 +116,26 @@ cannot help, and the error is 26× the flat case while the heading error stays
 inside the bound the flat case passes. It also has a *tenth* the spread, because
 dead reckoning over flat ground is a random walk while this is a systematic
 bias.
+
+`nav_terrain_dropout` is what that costs you. It gives Nav2 a goal 12.65 m away
+over the same ground. Across eight seeds:
+
+| | flat, healthy fix | slippery, no fix |
+| --- | --- | --- |
+| distance to goal, **believed** | 0.196 m | 0.215 m |
+| distance to goal, **true** | 0.229 m | **5.239 m** |
+| ground actually covered | 12.64 m | 7.64 m |
+
+The robot's own account of the run is unchanged — same believed goal error, same
+clean heading, same confident covariance — while it sits 5 m from where it was
+sent. Nav2 judges arrival from the estimate, because the estimate is the only
+thing it has, so a bias in the estimate moves the finish line with it and
+cancels out of every number the robot can check. It reported SUCCEEDED in five
+of the eight runs.
+
+This is why the suite scores against ground truth instead of against the filter,
+and why the scenario asserts on *both* goal errors at once: the failure is not
+that either number is bad, it is that they disagree.
 
 ## Simulation
 
