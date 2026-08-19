@@ -1,0 +1,18 @@
+{
+    "Amazon": {
+        "AssetProcessor": {
+            "Settings": {
+                "ScanFolder KrakenDemo/Assets": {
+                    "watch": "@GEMROOT:KrakenDemo@/Assets",
+                    "recursive": 1,
+                    "order": 101
+                },
+                "ScanFolder KrakenDemo/Registry": {
+                    "watch": "@GEMROOT:KrakenDemo@/Registry",
+                    "recursive": 1,
+                    "order": 102
+                }
+            }
+        }
+    }
+}

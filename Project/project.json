@@ -4,11 +4,22 @@
     "license": "BSD-3-Clause",
     "origin": "https://github.com/o3de/ROSConDemo",
     "summary": "Sensor fault injection and localisation scoring for ROS 2, in O3DE.",
-    "canonical_tags": ["Project"],
-    "user_tags": ["KrakenDemo", "Robotics", "ROS2"],
+    "canonical_tags": [
+        "Project"
+    ],
+    "user_tags": [
+        "KrakenDemo",
+        "Robotics",
+        "ROS2"
+    ],
     "icon_path": "preview.png",
     "engine": "o3de",
     "restricted_name": "projects",
     "external_subdirectories": [],
-    "gem_names": ["ROS2"]
+    "gem_names": [
+        "ROS2",
+        "LevelGeoreferencing"
+    ],
+    "project_id": "{b1793f39-2637-432e-94cf-9637be8052c4}",
+    "engine_version": "2.7.0"
 }

@@ -1,27 +1,24 @@
-# O3DE project — skeleton
+# O3DE project — scaffolding, no level yet
 
-**This is not a working O3DE project yet.** It holds `project.json` and the
-intended wiring; the engine scaffolding and the level itself are not authored.
-Building `docker/Dockerfile.Simulation` will get you O3DE and the ROS 2 Gem, but
-there is no scene to load. This is the largest open piece of the repo and
-contributions are very welcome.
+**This is not a working O3DE project yet.** The engine scaffolding is here and
+the ROS 2 Gem is declared, but no scene is authored, so there is nothing to
+load. This is the largest open piece of the repo and contributions are very
+welcome.
 
 Everything in `ros2_ws/` works today, against the headless simulator in
 `kraken_sim`. O3DE is the nicer front end, not a prerequisite.
 
-## What is deliberately not committed
+## What is committed here
 
-Generated scaffolding (`Code/`, `CMakeLists.txt`, `Registry/`, asset caches).
-Committing a hand-written approximation of files the O3DE CLI generates is a
-good way to ship something that does not build. Generate them instead:
+The scaffolding the O3DE CLI generates (`CMakeLists.txt`, `Gem/`, `Registry/`,
+`Platform/`, ...) is committed, because a build you cannot reproduce is not a
+result. `docker/o3de-setup.sh` only regenerates it when `CMakeLists.txt` is
+missing, so a fresh clone builds the same tree rather than whatever the CLI
+emits on the day.
 
-```bash
-o3de/scripts/o3de.sh create-project --project-path /tmp/KrakenDemo \
-    --project-name KrakenDemo
-```
-
-then copy the generated scaffolding here and keep the `project.json` in this
-directory (it already declares the `ROS2` gem dependency).
+Asset caches and build trees are not committed; see `.gitignore`. The Mac, iOS,
+Android and Windows resources came with the template and are dead weight on a
+Linux-only project — prunable if they ever get in the way.
 
 ## What the level needs to provide
 
@@ -52,10 +49,17 @@ else.
 
 ## Wiring the scenarios to O3DE
 
-`kraken_scenarios/kraken_scenarios/launch_utils.py` composes the stack. Swapping
-the simulator means dropping the `kraken_sim` node from `background` and
-starting the O3DE launcher instead; the injector, filter, scorer and runner are
-unchanged.
+`kraken_scenarios/kraken_scenarios/launch_utils.py` composes the stack, and the
+switch is already wired:
+
+```bash
+ros2 launch kraken_scenarios scenario.launch.py \
+    scenario:=total_gnss_dropout simulator:=o3de
+```
+
+`simulator:=o3de` starts no simulator and expects an already-running O3DE
+launcher to satisfy the topic contract above. The injector, filter, scorer and
+runner are unchanged.
 
 ## Origin
 
