@@ -17,7 +17,7 @@ import math
 import random
 
 import rclpy
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Twist, TwistWithCovarianceStamped
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from rclpy.qos import QoSDurabilityPolicy, QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
@@ -55,6 +55,11 @@ class HeadlessSim(Node):
         self.declare_parameter('wheel_speed_noise_stddev', 0.01)
         self.declare_parameter('wheel_lateral_slip_stddev', 0.01)
         self.declare_parameter('wheel_scale_error', 1.01)
+        # Doppler ground-speed radar, as fitted to agricultural machinery: it
+        # bounces off the ground rather than counting wheel turns, so it reads
+        # true speed whether or not the wheels are gripping.
+        self.declare_parameter('ground_speed_rate_hz', 20.0)
+        self.declare_parameter('ground_speed_noise_stddev', 0.02)
         self.declare_parameter('cmd_vel_timeout', 1.0)
         # JSON, because a ROS 2 parameter cannot carry a list of dicts. Empty
         # means uniform traction, which reproduces the original flat model.
@@ -79,6 +84,7 @@ class HeadlessSim(Node):
         self._wheel_sigma = self.get_parameter('wheel_speed_noise_stddev').value
         self._wheel_lateral_sigma = self.get_parameter('wheel_lateral_slip_stddev').value
         self._wheel_scale = self.get_parameter('wheel_scale_error').value
+        self._radar_sigma = self.get_parameter('ground_speed_noise_stddev').value
         self._terrain = TractionField.from_json(self.get_parameter('terrain').value)
 
         # Integer nanoseconds so the published clock never accumulates drift.
@@ -87,6 +93,10 @@ class HeadlessSim(Node):
         self._now_ns = 0
 
         self._random = random.Random(self.get_parameter('seed').value)
+        # The radar draws from its own stream so that adding it leaves every
+        # other sensor's noise sequence, and so every scenario's measured
+        # thresholds, exactly as they were.
+        self._radar_random = random.Random(self.get_parameter('seed').value + 10_000)
 
         self._x = self._y = self._yaw = 0.0
         self._odom_x = self._odom_y = self._odom_yaw = 0.0
@@ -96,6 +106,8 @@ class HeadlessSim(Node):
         self._gnss_every = max(1, round(self._rate / self.get_parameter('gnss_rate_hz').value))
         self._imu_every = max(1, round(self._rate / self.get_parameter('imu_rate_hz').value))
         self._wheel_every = max(1, round(self._rate / self.get_parameter('wheel_rate_hz').value))
+        self._radar_every = max(
+            1, round(self._rate / self.get_parameter('ground_speed_rate_hz').value))
         self._tick = 0
 
         clock_qos = QoSProfile(
@@ -109,6 +121,8 @@ class HeadlessSim(Node):
         self._gnss_pub = self.create_publisher(NavSatFix, 'gnss/fix', 10)
         self._imu_pub = self.create_publisher(Imu, 'imu/data', 10)
         self._wheel_pub = self.create_publisher(Odometry, 'wheel/odom', 10)
+        self._radar_pub = self.create_publisher(
+            TwistWithCovarianceStamped, 'ground_speed', 10)
         self.create_subscription(Twist, 'cmd_vel', self._on_cmd_vel, 10)
 
         self.create_timer(self._dt / self._rtf, self._step)
@@ -166,6 +180,8 @@ class HeadlessSim(Node):
             self._publish_imu(w_true)
         if self._tick % self._wheel_every == 0:
             self._publish_wheel(v_wheel, w_wheel)
+        if self._tick % self._radar_every == 0:
+            self._publish_ground_speed(v_true)
 
     def _publish_truth(self, v, w):
         msg = Odometry()
@@ -244,6 +260,16 @@ class HeadlessSim(Node):
         msg.twist.covariance[7] = self._wheel_lateral_sigma ** 2
         msg.twist.covariance[35] = var
         self._wheel_pub.publish(msg)
+
+    def _publish_ground_speed(self, v_true):
+        msg = TwistWithCovarianceStamped()
+        msg.header.stamp = self._stamp()
+        msg.header.frame_id = self._base_frame
+        msg.twist.twist.linear.x = v_true + self._radar_random.gauss(0.0, self._radar_sigma)
+        # Forward speed only. A ground-speed radar has one beam and cannot say
+        # anything about lateral motion or rotation.
+        msg.twist.covariance[0] = self._radar_sigma ** 2
+        self._radar_pub.publish(msg)
 
 
 def main():

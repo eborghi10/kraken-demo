@@ -1,0 +1,77 @@
+# SPDX-License-Identifier: BSD-3-Clause
+#
+# ekf_robust.yaml with forward speed taken from a ground-speed radar instead of
+# from the wheels. Everything else is identical.
+#
+# Why replace rather than add. The two sensors disagree by 0.44 m/s on slippery
+# ground, and an EKF blends disagreeing measurements by inverse variance, so the
+# one claiming to be more precise wins. The wheels report 0.01 m/s of noise and
+# the radar 0.02, which weights the blend 4:1 towards the wheels:
+#
+#   (0.8 / 0.01^2 + 0.36 / 0.02^2) / (1 / 0.01^2 + 1 / 0.02^2) = 0.71 m/s
+#
+# against a true 0.36. Fusing both would recover about a fifth of the error.
+# Tightening the radar to 0.005 m/s still only reaches 0.45 m/s, because the
+# problem is not that the radar is too quiet, it is that the wheels are wrong
+# and say they are not. A covariance is a claim about accuracy, and a slipping
+# encoder's claim is false in a way no amount of extra evidence corrects. The
+# lying measurement has to go.
+#
+# This is the one profile that is not a single measurement away from its
+# neighbour: it removes wheel forward speed and adds radar forward speed. That
+# is two lines, but one quantity, and the pairing is the point.
+ekf_filter_node:
+  ros__parameters:
+    frequency: 30.0
+    sensor_timeout: 0.2
+    two_d_mode: true
+    publish_tf: true
+
+    map_frame: map
+    odom_frame: odom
+    base_link_frame: base_link
+    world_frame: map
+
+    # Wheel odometry now contributes only the nonholonomic constraint: a
+    # differential-drive base has no lateral velocity. That constraint stays
+    # true under slip, because slip is forward, not sideways.
+    odom0: /wheel/odom/faulted
+    odom0_config: [false, false, false,
+                   false, false, false,
+                   false, true,  false,
+                   false, false, false,
+                   false, false, false]
+    odom0_differential: false
+    odom0_relative: false
+    odom0_queue_size: 10
+
+    # GNSS, already projected into the map frame by navsat_transform.
+    odom1: /odometry/gps
+    odom1_config: [true,  true,  false,
+                   false, false, false,
+                   false, false, false,
+                   false, false, false,
+                   false, false, false]
+    odom1_differential: false
+    odom1_relative: false
+    odom1_queue_size: 10
+
+    imu0: /imu/data/faulted
+    imu0_config: [false, false, false,
+                  false, false, false,
+                  false, false, false,
+                  false, false, true,
+                  false, false, false]
+    imu0_differential: false
+    imu0_relative: false
+    imu0_queue_size: 10
+    imu0_remove_gravitational_acceleration: true
+
+    # Forward ground speed, measured off the ground rather than off the wheels.
+    twist0: /ground_speed/faulted
+    twist0_config: [false, false, false,
+                    false, false, false,
+                    true,  false, false,
+                    false, false, false,
+                    false, false, false]
+    twist0_queue_size: 10

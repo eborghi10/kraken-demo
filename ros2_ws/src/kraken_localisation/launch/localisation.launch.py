@@ -2,8 +2,9 @@
 """Brings up navsat_transform and one EKF profile.
 
 The `profile` argument selects which filter tuning is under test: `naive` has
-no gyro, `robust` fuses IMU yaw rate. Everything else about the stack is
-identical between the two, which is what makes the comparison meaningful.
+no gyro, `robust` fuses IMU yaw rate, `radar` also takes forward speed from a
+ground-speed radar instead of the wheels. Everything else about the stack is
+identical between them, which is what makes the comparison meaningful.
 """
 import os
 
@@ -21,7 +22,7 @@ def _nodes(context):
 
     ekf_config = os.path.join(share, 'config', 'ekf_%s.yaml' % profile)
     if not os.path.exists(ekf_config):
-        raise RuntimeError('unknown profile %r, expected naive or robust' % profile)
+        raise RuntimeError('unknown profile %r, expected naive, robust or radar' % profile)
 
     return [
         Node(
@@ -58,7 +59,7 @@ def _nodes(context):
 def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('profile', default_value='robust',
-                              choices=['naive', 'robust'],
+                              choices=['naive', 'robust', 'radar'],
                               description='EKF tuning under test'),
         DeclareLaunchArgument('use_sim_time', default_value='true'),
         OpaqueFunction(function=_nodes),

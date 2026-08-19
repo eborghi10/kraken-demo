@@ -1,6 +1,6 @@
 fault_injector:
   ros__parameters:
-    channels: ["gnss", "imu", "wheel"]
+    channels: ["gnss", "imu", "wheel", "radar"]
 
     gnss:
       type: navsat
@@ -17,3 +17,8 @@ fault_injector:
       input: /wheel/odom
       output: /wheel/odom/faulted
       publish_tf: true
+
+    radar:
+      type: twist
+      input: /ground_speed
+      output: /ground_speed/faulted

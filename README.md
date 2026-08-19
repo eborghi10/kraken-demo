@@ -48,7 +48,7 @@ git clone <your fork> kraken-demo && cd kraken-demo
 docker compose -f docker/docker-compose.yml run --rm test
 ```
 
-That builds the workspace and runs all nine scenarios. To poke at it by hand:
+That builds the workspace and runs all ten scenarios. To poke at it by hand:
 
 ```bash
 docker compose -f docker/docker-compose.yml run --rm stack
@@ -95,7 +95,8 @@ would happily call it a pass.
 | `wheel_slip` | encoders report 2× the real motion | stays localised |
 | `terrain_dropout` | fix lost *and* the ground is slippery | **drifts 9.6 m** while heading stays under 3° |
 | `nav_baseline` | none, one Nav2 goal 12.65 m out | arrives, and is really there |
-| `nav_terrain_dropout` | the same goal, fix lost, ground slippery | **believes it arrived, is 5.2 m short** |
+| `nav_terrain_dropout` | the same goal, fix lost, ground slippery | **believes it arrived, is 5.3 m short** |
+| `nav_terrain_dropout_radar` | the same again, with a ground-speed radar | arrives late, and is really there |
 
 Thresholds live in the scenario files, each annotated with the distribution
 actually measured over an eight-seed sweep. Add a failure mode by adding a YAML
@@ -103,7 +104,7 @@ file; no Python required. See [docs/faults.md](docs/faults.md) for what each
 injector mode does and [docs/design.md](docs/design.md) for why it is built this
 way.
 
-Three scenarios assert *failure* on purpose. `gnss_spoof` documents a real gap —
+Four scenarios assert *failure* on purpose. `gnss_spoof` documents a real gap —
 the filter has no innovation gate, so a confident lie is a trusted lie. Better
 to have it red and visible than assumed and absent.
 
@@ -120,11 +121,13 @@ bias.
 `nav_terrain_dropout` is what that costs you. It gives Nav2 a goal 12.65 m away
 over the same ground. Across eight seeds:
 
-| | flat, healthy fix | slippery, no fix |
-| --- | --- | --- |
-| distance to goal, **believed** | 0.196 m | 0.215 m |
-| distance to goal, **true** | 0.229 m | **5.239 m** |
-| ground actually covered | 12.64 m | 7.64 m |
+| | flat, healthy fix | slippery, no fix | slippery, **radar** |
+| --- | --- | --- | --- |
+| distance to goal, **believed** | 0.219 m | 0.167 m | 0.321 m |
+| distance to goal, **true** | 0.268 m | **5.327 m** | **0.361 m** |
+| ground actually covered | 12.53 m | 7.76 m | 12.43 m |
+| time to goal | 25.0 s | 60.6 s | 93.0 s |
+| Nav2 reported success | 8/8 | 5/8 | 8/8 |
 
 The robot's own account of the run is unchanged — same believed goal error, same
 clean heading, same confident covariance — while it sits 5 m from where it was
@@ -136,6 +139,20 @@ of the eight runs.
 This is why the suite scores against ground truth instead of against the filter,
 and why the scenario asserts on *both* goal errors at once: the failure is not
 that either number is bad, it is that they disagree.
+
+The third column is the fix. A Doppler ground-speed radar reads speed off the
+ground rather than off the wheels, which is why agricultural machinery has
+carried them for decades. It is the only sensor left that can see the quantity
+the bias lives in once the fix is gone. With it, belief and truth agree again to
+0.04 m. Note that it arrives in 93 s rather than 25: the ground is still
+slippery and no sensor changes that, so arriving *late* is what success looks
+like, and arriving on time is the lie.
+
+Adding it alongside the wheels would not have worked. A filter blends by inverse
+variance, so the wheels' claimed ±0.01 m/s outvotes the radar four to one; a
+covariance is a claim about accuracy, and a slipping encoder's claim is false in
+a way no extra evidence corrects. The lying measurement has to go, not be
+outnumbered. See [docs/design.md](docs/design.md) for the arithmetic.
 
 ## Simulation
 
@@ -158,7 +175,7 @@ ros2_ws/src/
   kraken_interfaces/    FaultSpec, LocalisationScore, SetFault
   kraken_sim/           headless kinematic simulator, owns /clock
   kraken_faults/        the fault injector shim
-  kraken_localisation/  EKF profiles (naive / robust) + navsat_transform
+  kraken_localisation/  EKF profiles (naive / robust / radar) + navsat_transform
   kraken_scenarios/     scenario files, scorer, runner, launch tests
 ```
 

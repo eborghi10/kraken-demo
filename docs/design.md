@@ -157,23 +157,25 @@ encoders report that rate honestly, so with no fix to correct it the estimate
 advances at the commanded speed while the robot advances at 45% of it. Over the
 12.65 m goal used by `nav_baseline` and `nav_terrain_dropout`, across 8 seeds:
 
-| | flat, healthy fix | slippery, no fix |
-| --- | --- | --- |
-| `goal_error_estimated` | 0.196 +/- 0.047 | 0.215 +/- 0.096 |
-| `goal_error_true` | 0.229 +/- 0.069 | 5.239 +/- 0.107 |
-| `path_length` | 12.64 | 7.64 |
-| Nav2 reported success | 8/8 | 5/8 |
+| | flat, healthy fix | slippery, no fix | slippery, radar |
+| --- | --- | --- | --- |
+| `goal_error_estimated` | 0.219 +/- 0.089 | 0.167 +/- 0.113 | 0.321 +/- 0.012 |
+| `goal_error_true` | 0.268 +/- 0.084 | 5.327 +/- 0.076 | 0.361 +/- 0.028 |
+| `path_length` | 12.53 | 7.76 | 12.43 |
+| `navigation_time_s` | 24.95 | 60.55 | 92.96 |
+| Nav2 reported success | 8/8 | 5/8 | 8/8 |
 
-The believed error is the same to well inside its own spread. The true error is
-23x worse. Every signal available to the robot -- the goal check, the filter
-covariance, the encoders, the heading, which stays under 3 degrees -- says the
-run went as well as the control run did. This is the second failure in this
-project that is invisible in heading and visible only in position; the first was
-the unobservable lateral velocity above, and both were found by scoring against
-ground truth rather than against the estimate.
+Take the middle column first. The believed error is the same as the control's
+to well inside its own spread, and is if anything slightly smaller. The true
+error is 20x worse. Every signal available to the robot -- the goal check, the
+filter covariance, the encoders, the heading, which stays under 3 degrees --
+says the run went as well as the control run did. This is the second failure in
+this project that is invisible in heading and visible only in position; the
+first was the unobservable lateral velocity above, and both were found by
+scoring against ground truth rather than against the estimate.
 
-The spread is the other half of it. `goal_error_true` varies by 0.107 m across
-seeds while the flat case varies by 0.069 m, so the miss is not noise that a
+The spread is the other half of it. `goal_error_true` varies by 0.076 m across
+seeds, no more than the flat case's 0.084 m, so the miss is not noise that a
 longer run would average out. It is a systematic bias, reproducible to the
 centimetre, which is what makes it dangerous rather than merely inaccurate.
 
@@ -192,6 +194,83 @@ test flaky. The scenario asserts the two goal errors instead, which are stable,
 and the fact that a giving-up controller still believes it is centimetres from
 the goal is recorded here rather than in a threshold.
 
+## Why there is a ground-speed radar
+
+The third column is what fixes it. A Doppler ground-speed radar bounces a beam
+off the ground and reads the returned shift, so it measures how fast the vehicle
+is travelling over the surface rather than how fast its wheels are turning. It
+is not exotic: agricultural machinery has carried these for decades, precisely
+because wheel slip in a field is the normal case rather than the fault case.
+
+It is the only sensor in the stack that observes the quantity the bias lives in.
+GNSS would also catch it, but the scenario has removed GNSS, and that is the
+realistic case under canopy or in a headland shadow. The gyro sees rotation and
+is already correct. The encoders are, by construction, the thing being checked.
+
+With it, true error falls from 5.327 m to 0.361 m and, more to the point,
+belief and truth agree again: 0.321 against 0.361, a gap of 0.04 m where before
+it was 5.16 m. The robot's account of itself can be believed, which is a
+different and stronger property than the account being accurate.
+
+The run takes 93 s where the control takes 25 s. That is the honest outcome:
+the ground really is slippery and no sensor changes that, so covering 12.4 m
+takes longer. Arriving late is what success looks like here. Arriving in 25 s is
+what the version without the radar reports, and it is a lie.
+
+A side effect worth recording: the radar run is the most reproducible of the
+three, with navigation time varying by 0.34 s and path length by 0.03 m against
+the unaided slippery case's 49 s and 0.58 m. Once the estimate is right, MPPI's
+rollouts predict correctly again and the controller stops thrashing. Fixing the
+estimate stabilised the controller without touching the controller.
+
+### Why the radar replaces the wheels rather than joining them
+
+The obvious change is to fuse the radar alongside the existing wheel velocity.
+It does not work, and the reason is worth stating because it generalises.
+
+An EKF blends disagreeing measurements by inverse variance, so the sensor
+claiming to be more precise wins. The wheels report 0.01 m/s of noise and the
+radar 0.02, which weights the blend 4:1 towards the wheels and recovers about a
+fifth of a 0.44 m/s disagreement. Tightening the radar to 0.005 m/s still only
+reaches 0.45 m/s against a true 0.36.
+
+The problem is not that the radar is too quiet. A covariance is a claim about
+accuracy, and under slip the encoders' claim is false: they report 0.01 m/s of
+noise while being 0.44 m/s wrong. No quantity of correct evidence outvotes a
+confident lie, because confidence is exactly what the filter weighs by. So
+`ekf_radar.yaml` removes wheel forward speed rather than supplementing it. The
+wheels keep the nonholonomic constraint, which stays true under slip, because
+slip is forward and the constraint is sideways.
+
+This is the one profile that is not a single measurement from its neighbour. It
+removes one and adds one, and the pairing is the point.
+
+## Why the navigation scenarios run in real time
+
+The localisation scenarios run at `real_time_factor: 3.0`. The navigation ones
+run at 1.0, and the difference is not a preference.
+
+Nav2's controller optimises in wall time while the simulator advances sim time,
+so running the clock three times fast gives MPPI a third of the compute per
+simulated second. Open-loop scenarios do not notice, because nothing in them
+reacts to the result. A closed loop does. On flat ground it survives, because
+tracking a plan that works needs little search; under slip, where every rollout
+mispredicts, it does not, and the scenario becomes a measurement of the host's
+spare CPU.
+
+This was found by accident. Adding the radar added two publishers, which was
+enough extra load to change `nav_terrain_dropout` from a tight 5.32 +/- 0.13 m
+to 3.95 +/- 2.29 m. The sensor could not have caused that, since the profile
+under test does not fuse it; the load could, and did. In real time the scenario
+returns to 5.33 +/- 0.08 m. The lesson is that a fast clock is free only for
+open-loop measurements.
+
+The radar's noise is also drawn from its own RNG stream, seeded separately, so
+that adding a sensor leaves every other sensor's noise sequence untouched and
+the existing scenarios' measured thresholds still mean what they meant. That
+held: `total_gnss_dropout` reproduces bit-for-bit, with a path-length spread of
+exactly zero across seeds.
+
 ## Known gaps
 
 - No innovation gating, so `gnss_spoof` is followed rather than rejected.
@@ -202,6 +281,8 @@ the goal is recorded here rather than in a threshold.
 - The navigation scenarios score a single goal at the end of the run. There is
   no cross-track error along the path and no stuck-and-recovery metric, so a
   controller that wanders badly but arrives still scores clean.
-- Nothing detects the bias that `nav_terrain_dropout` demonstrates. Comparing
-  commanded velocity against a non-wheel measurement would do it, and the sim
-  has no such sensor yet.
+- The radar corrects the bias but nothing reports it. Wheel speed minus radar
+  speed is the slip ratio, which is a number a fruit picker could act on and is
+  not published anywhere.
+- Nothing detects the bias when the radar is absent, which is still the case for
+  every profile but `radar`. The stack has no cross-check that would fire.

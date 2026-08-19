@@ -2,6 +2,12 @@ name: nav_baseline
 profile: robust
 seed: 0
 navigation: true
+# Nav2's controller optimises in wall time while the simulator advances sim
+# time, so running the clock fast gives MPPI less compute per simulated second.
+# The localisation scenarios are open loop and do not care, but a closed loop
+# does: at 3x this scenario is stable only because flat ground is easy, and its
+# slippery siblings thrash. Real time everywhere the controller is in the loop.
+real_time_factor: 1.0
 description: >
   The control. Flat ground, a healthy fix, and one Nav2 goal 12 m out. Nav2
   should report success and the robot should actually be there, which is what
@@ -12,9 +18,9 @@ phases:
   - {label: mark, action: mark_reference}
   - {label: goto, action: navigate_to, x: 12.0, y: 4.0, timeout: 120.0}
 
-# Measured over 8 seeds: goal_error_estimated 0.196 +/- 0.047 (max 0.252),
-# goal_error_true 0.229 +/- 0.069 (max 0.276), path_length 12.64 +/- 0.12,
-# navigation_time 25.78 +/- 0.27 s, succeeded 8/8.
+# Measured over 8 seeds: goal_error_estimated 0.219 +/- 0.089 (max 0.277),
+# goal_error_true 0.268 +/- 0.084 (max 0.361), path_length 12.53 +/- 0.12,
+# navigation_time 24.95 +/- 2.35 s, succeeded 8/8.
 #
 # max_goal_error_true is the bound that matters: on good ground the robot is
 # where it says it is, so belief and truth are held to the same tolerance.

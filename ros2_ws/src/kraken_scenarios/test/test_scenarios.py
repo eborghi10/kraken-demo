@@ -26,6 +26,7 @@ SCENARIOS = [
     'terrain_dropout',
     'nav_baseline',
     'nav_terrain_dropout',
+    'nav_terrain_dropout_radar',
 ]
 
 REPORT_DIR = os.environ.get('KRAKEN_REPORT_DIR', '/tmp/kraken_reports')

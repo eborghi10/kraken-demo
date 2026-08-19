@@ -2,6 +2,8 @@ name: nav_terrain_dropout
 profile: robust
 seed: 0
 navigation: true
+# See nav_baseline: the controller needs wall-clock headroom to be repeatable.
+real_time_factor: 1.0
 description: >
   The same goal as nav_baseline, with the fix lost and the ground slippery from
   3 m out. The wheels turn at the commanded rate and the encoders report it
@@ -19,8 +21,8 @@ phases:
   - {label: kill_gnss, action: set_fault, channel: gnss, mode: dropout}
   - {label: goto, action: navigate_to, x: 12.0, y: 4.0, timeout: 120.0}
 
-# Measured over 8 seeds: goal_error_estimated 0.215 +/- 0.096 (max 0.315),
-# goal_error_true 5.239 +/- 0.107 (min 5.049), path_length 7.64 +/- 0.33.
+# Measured over 8 seeds: goal_error_estimated 0.167 +/- 0.113 (max 0.253),
+# goal_error_true 5.327 +/- 0.076 (min 5.242), path_length 7.76 +/- 0.58.
 #
 # The pair of goal bounds is the point of this scenario. The robot must still
 # believe it arrived, to the same tolerance nav_baseline passes, while actually
@@ -29,7 +31,9 @@ phases:
 # navigation_succeeded is deliberately not asserted: Nav2 returned SUCCEEDED in
 # 5 of 8 runs and gave up in the other 3, so requiring either value would make
 # the test flaky. That it reports success at all, over half the time, while
-# 5 m from the goal is the finding.
+# 5 m from the goal is the finding. The spread is real and not a timing
+# artefact: it survives running the clock in real time, because MPPI's model
+# assumes commanded velocity is achieved and mispredicts every rollout.
 expect:
   max_goal_error_estimated: 0.6
   min_goal_error_true: 4.0

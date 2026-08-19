@@ -12,7 +12,7 @@ import math
 import random
 
 import rclpy
-from geometry_msgs.msg import TransformStamped
+from geometry_msgs.msg import TransformStamped, TwistWithCovarianceStamped
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from sensor_msgs.msg import Imu, NavSatFix, NavSatStatus
@@ -39,9 +39,14 @@ SUPPORTED = {
             FaultSpec.MODE_DEGRADE, FaultSpec.MODE_BIAS_RAMP},
     'odometry': {FaultSpec.MODE_HEALTHY, FaultSpec.MODE_DROPOUT,
                  FaultSpec.MODE_DEGRADE, FaultSpec.MODE_SLIP},
+    # No slip mode: not being fooled by slip is the whole reason the sensor is
+    # on the vehicle. It can still fail, drift or go noisy.
+    'twist': {FaultSpec.MODE_HEALTHY, FaultSpec.MODE_DROPOUT,
+              FaultSpec.MODE_DEGRADE, FaultSpec.MODE_BIAS_RAMP},
 }
 
-MSG_TYPES = {'navsat': NavSatFix, 'imu': Imu, 'odometry': Odometry}
+MSG_TYPES = {'navsat': NavSatFix, 'imu': Imu, 'odometry': Odometry,
+             'twist': TwistWithCovarianceStamped}
 
 
 class Channel:
@@ -148,6 +153,8 @@ class FaultInjector(Node):
             out = self._apply_navsat(channel, mode, msg)
         elif channel.kind == 'imu':
             out = self._apply_imu(channel, mode, msg)
+        elif channel.kind == 'twist':
+            out = self._apply_twist(channel, mode, msg)
         else:
             out = self._apply_odometry(channel, mode, msg)
 
@@ -212,6 +219,20 @@ class FaultInjector(Node):
         elif mode == FaultSpec.MODE_SLIP:
             msg.twist.twist.linear.x *= spec.slip_ratio
             msg.twist.twist.angular.z *= spec.slip_ratio
+        return msg
+
+    def _apply_twist(self, channel, mode, msg):
+        if mode == FaultSpec.MODE_DROPOUT:
+            return None
+        spec = channel.spec
+        if mode == FaultSpec.MODE_DEGRADE:
+            msg.twist.twist.linear.x += self._random.gauss(0.0, spec.noise_stddev)
+            scale = spec.covariance_scale if spec.covariance_scale > 0.0 else 1.0
+            msg.twist.covariance = [v * scale for v in msg.twist.covariance]
+        elif mode == FaultSpec.MODE_BIAS_RAMP:
+            # A radar that starts reading off the crop canopy instead of the
+            # ground reports a speed that is wrong but still confident.
+            msg.twist.twist.linear.x += channel.bias
         return msg
 
     def _broadcast_tf(self, channel, msg):
