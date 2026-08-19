@@ -13,6 +13,20 @@ Two images, following the split used by [o3de/ROSConDemo][roscondemo]:
 whole scenario suite. `Dockerfile.Simulation` builds O3DE from source: tens of
 gigabytes, hours, and an NVIDIA container runtime to run it.
 
+`Dockerfile.Stack` has three stages: `base` (dependencies), `dev` (base plus
+editor tooling, used by `.devcontainer`) and `stack` (base plus a baked build).
+`stack` is last, so a build with no `--target` gives you that and skips `dev`.
+
+## Devcontainer
+
+"Dev Containers: Reopen in Container" in VS Code builds the `dev` stage, mounts
+the repository at `/data/workspace` so paths match the images above, and runs
+`colcon build`. Sources are mounted rather than copied, so edits are live and
+only a rebuild is needed, not an image rebuild.
+
+The container joins the host network and gets the X11 socket, so `rviz2` and
+`rqt_plot` work.
+
 ## Stack
 
 ```bash
