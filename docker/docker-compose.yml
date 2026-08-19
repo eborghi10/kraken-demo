@@ -3,6 +3,12 @@
 # Run everything from the repository root:
 #   docker compose -f docker/docker-compose.yml run --rm test
 #   docker compose -f docker/docker-compose.yml run --rm stack
+#
+# Bind mount sources are resolved by the daemon, so they are host paths. That is
+# invisible on the host, where `..` is correct, and fatal from inside the
+# devcontainer, where `..` is /data/workspace and does not exist on the host.
+# Driving compose from in there means pointing both of these at the host:
+#   export KRAKEN_ROOT=$HOME/kraken-demo O3DE_HOME=$HOME/o3de
 name: kraken-demo
 
 services:
@@ -15,8 +21,8 @@ services:
     network_mode: host
     ipc: host
     volumes:
-      - ../ros2_ws/src:/data/workspace/ros2_ws/src:ro
-      - ../results:/data/workspace/results
+      - ${KRAKEN_ROOT:-..}/ros2_ws/src:/data/workspace/ros2_ws/src:ro
+      - ${KRAKEN_ROOT:-..}/results:/data/workspace/results
     working_dir: /data/workspace/ros2_ws
     stdin_open: true
     tty: true
@@ -31,6 +37,11 @@ services:
                 colcon test-result --all --verbose"
 
   # Heavy image: O3DE editor / game launcher. Needs a GPU.
+  #
+  # The engine is NOT in the image. /o3de is a bind mount so the clone and the
+  # build tree survive image rebuilds and link incrementally; point O3DE_HOME
+  # somewhere with ~120 GB free if $HOME/o3de is not it. Run `xhost +local:` on
+  # the host first, or the container cannot reach the X server.
   sim:
     build:
       context: ..
@@ -43,7 +54,14 @@ services:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=all
     volumes:
+      - ${KRAKEN_ROOT:-..}:/data/workspace
+      - ${O3DE_HOME:-${HOME}/o3de}:/o3de
+      # O3DE keeps its manifest and its ~10 GB of downloaded 3rdParty packages
+      # here, not under /o3de. Without this the documented `run --rm` workflow
+      # re-downloads them every time, so o3de-setup.sh is not resumable at all.
+      - o3de_home:/home/ubuntu/.o3de
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    working_dir: /data/workspace
     deploy:
       resources:
         reservations:
@@ -53,3 +71,6 @@ services:
               capabilities: [gpu]
     stdin_open: true
     tty: true
+
+volumes:
+  o3de_home:

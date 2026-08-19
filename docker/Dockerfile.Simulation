@@ -1,16 +1,20 @@
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# O3DE simulation image. Follows the layout used by o3de/ROSConDemo's
-# docker/Dockerfile.Simulation.
+# O3DE runtime environment. Dependencies only -- the engine, the ROS 2 Gem and
+# the project are NOT baked into the image.
 #
-# This build is heavy (tens of GB, hours) and the resulting image needs a GPU
-# and the NVIDIA container toolkit to run. The integration tests do NOT need
-# it -- use Dockerfile.Stack for those. Build this only when you want to drive
-# the demo through the O3DE scene.
+# Baking them in costs roughly twice the disk, because the LFS clone layer and
+# the build tree layer both persist, and it turns every project change into a
+# multi-hour rebuild with no incremental linking. Instead /o3de is bind-mounted
+# from the host, populated once by docker/o3de-setup.sh, and rebuilt
+# incrementally after that.
 #
-# STATUS: the final cmake step will not succeed yet. Project/ holds only
-# project.json; the engine scaffolding and the level are not authored. See
-# Project/README.md. Everything in ros2_ws/ works today without O3DE.
+#   docker compose -f docker/docker-compose.yml build sim
+#   docker compose -f docker/docker-compose.yml run --rm sim
+#   ./docker/o3de-setup.sh        # inside the container, first run only
+#
+# Running this needs a GPU, the NVIDIA container toolkit, and `xhost +local:`
+# on the host. The scenario tests need none of it -- use Dockerfile.Stack.
 
 ARG ROS_VERSION=jazzy
 ARG UBUNTU_VERSION=noble
@@ -21,27 +25,37 @@ ENV WORKSPACE=/data/workspace
 ENV LANG=en_US.UTF-8
 ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
-ARG O3DE_REPO=https://github.com/o3de/o3de.git
-ARG O3DE_BRANCH=development
-ENV O3DE_ROOT=$WORKSPACE/o3de
+# Same file as Dockerfile.Stack. O3DE runs here while the ROS stack runs in the
+# other container, so both ends of discovery have to be configured identically.
+ENV CYCLONEDDS_URI=/etc/cyclonedds.xml
+COPY docker/cyclonedds.xml /etc/cyclonedds.xml
 
-ARG O3DE_EXTRAS_REPO=https://github.com/o3de/o3de-extras.git
-ARG O3DE_EXTRAS_BRANCH=development
-ENV O3DE_EXTRAS_ROOT=$WORKSPACE/o3de-extras
+# Bind-mount targets, not image contents. o3de-setup.sh populates them.
+ENV O3DE_ROOT=/o3de/engine
+ENV O3DE_EXTRAS_ROOT=/o3de/extras
+ENV KRAKEN_PROJECT=$WORKSPACE/Project
+ENV KRAKEN_WS=$WORKSPACE/ros2_ws
 
-ENV KRAKEN_ROOT=$WORKSPACE/kraken-demo
-ENV KRAKEN_PROJECT=$KRAKEN_ROOT/Project
-ENV KRAKEN_WS=$KRAKEN_ROOT/ros2_ws
-
-WORKDIR $WORKSPACE
+ARG USERNAME=ubuntu
 
 RUN apt-get update \
     && DEBIAN_FRONTEND="noninteractive" apt-get -y install --no-install-recommends \
-        binutils clang cmake curl git git-lfs ninja-build \
-        libglu1-mesa-dev libxcb-xinerama0 libfontconfig1-dev \
-        libxcb-xkb-dev libxkbcommon-x11-dev libxkbcommon-dev \
-        libxcb-xfixes0-dev libxcb-xinput-dev libxcb-xinput0 libpcre2-16-0 \
-        locales python3-pip software-properties-common \
+        binutils clang cmake curl git git-lfs ninja-build pkg-config \
+        libglu1-mesa-dev mesa-common-dev \
+        libcurl4-openssl-dev libsdl2-dev zlib1g-dev \
+        libunwind-dev libzstd-dev libssl-dev \
+        libfontconfig1-dev libpcre2-16-0 \
+        libxcb-xinerama0 libxcb-xkb-dev libxcb-xfixes0-dev \
+        libxcb-xinput-dev libxcb-xinput0 \
+        libxcb-randr0-dev libxcb-shape0-dev libxcb-sync-dev \
+        libxcb-shm0-dev libxcb-glx0-dev libxcb-util-dev \
+        libxcb-image0-dev libxcb-keysyms1-dev libxcb-icccm4-dev \
+        libxcb-render-util0-dev libxcb-cursor-dev \
+        libx11-xcb-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+        libxkbcommon-x11-dev libxkbcommon-dev \
+        libx11-6 libxext6 \
+        libvulkan1 vulkan-tools \
+        locales python3-pip software-properties-common sudo \
         python3-colcon-common-extensions \
         ros-${ROS_DISTRO}-ackermann-msgs \
         ros-${ROS_DISTRO}-control-toolbox \
@@ -58,34 +72,20 @@ RUN apt-get update \
     && update-locale LANG=en_US.UTF-8 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY . $KRAKEN_ROOT
-
-RUN . /opt/ros/${ROS_DISTRO}/setup.sh \
-    && git clone --single-branch -b $O3DE_BRANCH $O3DE_REPO $O3DE_ROOT \
-    && git -C $O3DE_ROOT lfs install && git -C $O3DE_ROOT lfs pull \
-    && git clone --single-branch -b $O3DE_EXTRAS_BRANCH $O3DE_EXTRAS_REPO $O3DE_EXTRAS_ROOT \
-    && git -C $O3DE_EXTRAS_ROOT lfs install && git -C $O3DE_EXTRAS_ROOT lfs pull \
-    && $O3DE_ROOT/python/get_python.sh \
-    && $O3DE_ROOT/scripts/o3de.sh register -ep $O3DE_ROOT \
-    && $O3DE_ROOT/scripts/o3de.sh register -gp $O3DE_EXTRAS_ROOT/Gems/ROS2 \
-    && $O3DE_ROOT/scripts/o3de.sh register -pp $KRAKEN_PROJECT
-
-RUN . /opt/ros/${ROS_DISTRO}/setup.sh \
-    && cd $KRAKEN_PROJECT \
-    && cmake -B build/linux -G"Ninja Multi-Config" \
-        -DLY_DISABLE_TEST_MODULES=ON -DLY_STRIP_DEBUG_SYMBOLS=ON \
-    && cmake --build build/linux --config profile \
-        --target KrakenDemo.GameLauncher Editor AssetProcessor KrakenDemo.Assets
-
-RUN . /opt/ros/${ROS_DISTRO}/setup.sh \
-    && cd $KRAKEN_WS \
-    && colcon build --symlink-install
+# Files created in the bind mounts come back owned by whoever ran the build, so
+# build as uid 1000 rather than root. `ubuntu` already holds uid 1000 in Noble.
+RUN echo "$USERNAME ALL=(root) NOPASSWD:ALL" > /etc/sudoers.d/$USERNAME \
+    && chmod 0440 /etc/sudoers.d/$USERNAME \
+    && mkdir -p /o3de \
+    && chown -R $USERNAME:$USERNAME /o3de
 
 RUN echo ". /opt/ros/${ROS_DISTRO}/setup.bash" >> /etc/bash.bashrc \
-    && echo ". $KRAKEN_WS/install/setup.bash" >> /etc/bash.bashrc
+    && echo "if [ -f $KRAKEN_WS/install/setup.bash ]; then . $KRAKEN_WS/install/setup.bash; fi" \
+        >> /etc/bash.bashrc
 
 ENV NVIDIA_VISIBLE_DEVICES=all
 ENV NVIDIA_DRIVER_CAPABILITIES=all
 
-WORKDIR $KRAKEN_WS
+USER $USERNAME
+WORKDIR $WORKSPACE
 CMD ["/bin/bash"]

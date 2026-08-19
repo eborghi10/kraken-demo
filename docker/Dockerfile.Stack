@@ -24,7 +24,10 @@ ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
 # CycloneDDS defaults to multicast discovery, which is unreliable inside
 # containers. Everything in this image is single-host, so keep it on loopback.
+# Shared with Dockerfile.Simulation: the two must agree or cross-container
+# discovery works only by accident.
 ENV CYCLONEDDS_URI=/etc/cyclonedds.xml
+COPY docker/cyclonedds.xml /etc/cyclonedds.xml
 
 WORKDIR $WORKSPACE
 
@@ -39,6 +42,13 @@ RUN apt-get update \
         ros-${ROS_DISTRO}-robot-localization \
         ros-${ROS_DISTRO}-tf2-ros \
         ros-${ROS_DISTRO}-tf-transformations \
+        ros-${ROS_DISTRO}-nav2-behaviors \
+        ros-${ROS_DISTRO}-nav2-bt-navigator \
+        ros-${ROS_DISTRO}-nav2-controller \
+        ros-${ROS_DISTRO}-nav2-lifecycle-manager \
+        ros-${ROS_DISTRO}-nav2-mppi-controller \
+        ros-${ROS_DISTRO}-nav2-planner \
+        ros-${ROS_DISTRO}-nav2-smac-planner \
         ros-${ROS_DISTRO}-launch-testing \
         ros-${ROS_DISTRO}-launch-testing-ros \
         ros-${ROS_DISTRO}-launch-pytest \
@@ -46,20 +56,6 @@ RUN apt-get update \
     && dpkg-reconfigure --frontend=noninteractive locales \
     && update-locale LANG=en_US.UTF-8 \
     && rm -rf /var/lib/apt/lists/*
-
-RUN printf '%s\n' \
-    '<?xml version="1.0" encoding="UTF-8" ?>' \
-    '<CycloneDDS xmlns="https://cdds.io/config">' \
-    '  <Domain id="any">' \
-    '    <General>' \
-    '      <Interfaces><NetworkInterface address="127.0.0.1"/></Interfaces>' \
-    '      <AllowMulticast>false</AllowMulticast>' \
-    '    </General>' \
-    '    <Discovery><ParticipantIndex>auto</ParticipantIndex>' \
-    '      <Peers><Peer address="localhost"/></Peers>' \
-    '    </Discovery>' \
-    '  </Domain>' \
-    '</CycloneDDS>' > /etc/cyclonedds.xml
 
 # Guarded, because the overlay only exists once the workspace has been built.
 RUN echo ". /opt/ros/${ROS_DISTRO}/setup.bash" >> /etc/bash.bashrc \
@@ -84,13 +80,16 @@ RUN apt-get update \
         gdb \
         git \
         less \
+        mesa-utils \
         nano \
         openssh-client \
+        pciutils \
         ros-dev-tools \
         ros-${ROS_DISTRO}-rqt-plot \
         ros-${ROS_DISTRO}-rviz2 \
         sudo \
         vim \
+        vulkan-tools \
     && rm -rf /var/lib/apt/lists/*
 
 # VS Code rewrites this user's uid/gid to match the host on first start, so

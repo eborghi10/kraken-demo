@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!-- SPDX-License-Identifier: BSD-3-Clause
+
+     Shared by Dockerfile.Stack and Dockerfile.Simulation. Both must use the
+     same discovery settings: once the ROS stack runs in one container and O3DE
+     in another, a multicast-enabled participant and a loopback-pinned one will
+     discover each other only by luck.
+
+     Multicast discovery is unreliable inside containers. Both containers run
+     with network_mode: host, so they share the loopback interface and unicast
+     discovery over it is deterministic. Split them across machines and this
+     needs relaxing.
+-->
+<CycloneDDS xmlns="https://cdds.io/config">
+  <Domain id="any">
+    <General>
+      <Interfaces><NetworkInterface address="127.0.0.1"/></Interfaces>
+      <AllowMulticast>false</AllowMulticast>
+    </General>
+    <Discovery>
+      <ParticipantIndex>auto</ParticipantIndex>
+      <Peers><Peer address="localhost"/></Peers>
+    </Discovery>
+  </Domain>
+</CycloneDDS>
