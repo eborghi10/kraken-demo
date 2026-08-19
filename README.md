@@ -18,12 +18,22 @@ notice, and does it care?**
 ## The result
 
 One EKF configuration, one extra fused measurement, same 40-second drive with
-the GNSS fix killed at t=15s:
+the GNSS fix killed at t=15s. Ten runs per profile, seeds 0-9:
 
 | profile  | fuses                  | worst position error | worst heading error |
 | -------- | ---------------------- | -------------------- | ------------------- |
-| `naive`  | wheel speed + GNSS     | **22 m**             | **180°**            |
-| `robust` | + IMU yaw rate         | **1.4 m**            | **2.5°**            |
+| `naive`  | wheel speed + GNSS     | **21.8 ± 0.9 m**     | **179.9 ± 0.04°**   |
+| `robust` | + IMU yaw rate         | **0.36 ± 0.25 m**    | **1.9 ± 1.2°**      |
+
+Mean ± standard deviation over ten seeds. Reproduce with
+
+    ros2 run kraken_scenarios sweep total_gnss_dropout -n 10
+
+Do not quote a single run. The harness is not reproducible: the simulator steps
+on a wall-clock timer while the filter, fault injector and scorer consume its
+output over DDS, so the interleaving - and the result - moves from run to run.
+The order of magnitude between the two profiles is the result; the second
+decimal place is not.
 
 Both look identical while the fix is healthy. That is the entire point: the bug
 is invisible until the day it matters. The `naive` profile is kept, and kept

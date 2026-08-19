@@ -50,6 +50,7 @@ class HeadlessSim(Node):
         self.declare_parameter('imu_yaw_rate_bias', 0.0005)
         self.declare_parameter('wheel_rate_hz', 50.0)
         self.declare_parameter('wheel_speed_noise_stddev', 0.01)
+        self.declare_parameter('wheel_lateral_slip_stddev', 0.01)
         self.declare_parameter('wheel_scale_error', 1.01)
         self.declare_parameter('cmd_vel_timeout', 1.0)
 
@@ -70,6 +71,7 @@ class HeadlessSim(Node):
         self._imu_rate_sigma = self.get_parameter('imu_yaw_rate_noise_stddev').value
         self._imu_rate_bias = self.get_parameter('imu_yaw_rate_bias').value
         self._wheel_sigma = self.get_parameter('wheel_speed_noise_stddev').value
+        self._wheel_lateral_sigma = self.get_parameter('wheel_lateral_slip_stddev').value
         self._wheel_scale = self.get_parameter('wheel_scale_error').value
 
         # Integer nanoseconds so the published clock never accumulates drift.
@@ -222,6 +224,10 @@ class HeadlessSim(Node):
         msg.twist.twist.angular.z = w_wheel
         var = self._wheel_sigma ** 2
         msg.twist.covariance[0] = var
+        # A differential-drive base cannot travel sideways. Publishing that zero
+        # with a covariance is what lets the filter fuse it as a constraint;
+        # without it, lateral velocity is unobservable the moment GNSS stops.
+        msg.twist.covariance[7] = self._wheel_lateral_sigma ** 2
         msg.twist.covariance[35] = var
         self._wheel_pub.publish(msg)
 

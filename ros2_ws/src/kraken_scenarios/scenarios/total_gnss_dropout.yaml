@@ -13,10 +13,12 @@ phases:
   - {label: straight, duration: 10.0, linear: 0.8, angular: 0.0}
   - {label: turning, duration: 30.0, linear: 0.8, angular: 0.25}
 
-# Measured over 3 runs: worst position 0.69-1.39 m, worst heading 1.9-2.5 deg.
-# Thresholds carry roughly 2x margin.
+# Measured over 10 seeds: worst position 0.14-0.90 m (mean 0.36, sd 0.25), worst
+# heading 0.81-4.30 deg. The bound carries a bit over 2x margin on the worst
+# seed seen. Before the wheel odometry published a lateral-velocity covariance,
+# the same sweep ran 0.37-5.13 m and half the seeds broke a 3.0 m bound.
 expect:
-  max_position_error: 3.0
+  max_position_error: 2.0
   max_heading_error_deg: 8.0
   min_path_length: 25.0
   min_path_rotation_deg: 300.0

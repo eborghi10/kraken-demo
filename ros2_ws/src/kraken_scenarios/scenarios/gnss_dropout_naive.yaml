@@ -15,9 +15,10 @@ phases:
   - {label: straight, duration: 10.0, linear: 0.8, angular: 0.0}
   - {label: turning, duration: 30.0, linear: 0.8, angular: 0.25}
 
-# Measured over 3 runs: 21.9-22.1 m of position error and a heading that ends up
-# essentially reversed. The bound is set far below that, so this only goes green
-# if the naive filter genuinely stops failing.
+# Measured over 10 seeds: 20.8-23.6 m of position error (mean 21.8, sd 0.85) and
+# a heading that ends up essentially reversed (179.86-179.97 deg). The bound is
+# set far below that, so this only goes green if the naive filter genuinely
+# stops failing.
 expect:
   min_position_error: 10.0
   min_path_length: 25.0

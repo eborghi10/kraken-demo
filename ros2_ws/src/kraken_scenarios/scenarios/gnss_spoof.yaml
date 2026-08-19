@@ -22,8 +22,8 @@ phases:
   - {label: straight, duration: 10.0, linear: 0.8, angular: 0.0}
   - {label: turning, duration: 30.0, linear: 0.8, angular: 0.25}
 
-# Measured over 3 runs: the estimate ends up 7.9-8.1 m off, tracking the spoof
-# almost exactly. The bound asserts the failure, not the fix.
+# Measured over 8 seeds: the estimate ends up 7.79-8.39 m off (mean 8.02),
+# tracking the spoof almost exactly. The bound asserts the failure, not the fix.
 expect:
   min_position_error: 3.0
   min_path_length: 25.0

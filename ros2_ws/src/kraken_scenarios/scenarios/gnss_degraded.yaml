@@ -26,7 +26,8 @@ phases:
   - {label: straight, duration: 10.0, linear: 0.8, angular: 0.0}
   - {label: turning, duration: 30.0, linear: 0.8, angular: 0.25}
 
-# Measured over 3 runs: worst position 1.73-1.96 m, settled heading 14-21 deg.
+# Measured over 8 seeds: worst position 1.08-1.82 m (mean 1.41), worst heading
+# 23-40 deg, settling back to within 17 deg.
 expect:
   max_position_error: 4.0
   max_final_heading_error_deg: 40.0
