@@ -5,11 +5,17 @@
 # This is the image the integration tests run in. It has no GPU or graphics
 # dependency, so it also works in CI. Pair it with Dockerfile.Simulation when
 # you want the O3DE scene instead of the headless sim.
+#
+#   base   dependencies only
+#   dev    base + editor tooling, used by .devcontainer (sources are mounted)
+#   stack  base + a baked build of ros2_ws, used by CI and docker compose
+#
+# `stack` is last, so a build with no --target gives you that and skips `dev`.
 
 ARG ROS_VERSION=jazzy
 ARG UBUNTU_VERSION=noble
 
-FROM ros:${ROS_VERSION}-ros-base-${UBUNTU_VERSION}
+FROM ros:${ROS_VERSION}-ros-base-${UBUNTU_VERSION} AS base
 
 ENV WORKSPACE=/data/workspace
 ENV KRAKEN_WS=$WORKSPACE/ros2_ws
@@ -55,14 +61,55 @@ RUN printf '%s\n' \
     '  </Domain>' \
     '</CycloneDDS>' > /etc/cyclonedds.xml
 
+# Guarded, because the overlay only exists once the workspace has been built.
+RUN echo ". /opt/ros/${ROS_DISTRO}/setup.bash" >> /etc/bash.bashrc \
+    && echo "if [ -f $KRAKEN_WS/install/setup.bash ]; then . $KRAKEN_WS/install/setup.bash; fi" \
+        >> /etc/bash.bashrc
+
+WORKDIR $KRAKEN_WS
+CMD ["/bin/bash"]
+
+
+# --- dev ---------------------------------------------------------------------
+# Interactive image for .devcontainer. Sources are bind-mounted rather than
+# copied, so nothing is built here.
+
+FROM base AS dev
+
+ARG USERNAME=ubuntu
+
+RUN apt-get update \
+    && DEBIAN_FRONTEND="noninteractive" apt-get -y install --no-install-recommends \
+        bash-completion \
+        gdb \
+        git \
+        less \
+        nano \
+        openssh-client \
+        ros-dev-tools \
+        ros-${ROS_DISTRO}-rqt-plot \
+        ros-${ROS_DISTRO}-rviz2 \
+        sudo \
+        vim \
+    && rm -rf /var/lib/apt/lists/*
+
+# VS Code rewrites this user's uid/gid to match the host on first start, so
+# files created in the bind mount come back owned by you and not by root.
+RUN echo "$USERNAME ALL=(root) NOPASSWD:ALL" > /etc/sudoers.d/$USERNAME \
+    && chmod 0440 /etc/sudoers.d/$USERNAME \
+    && mkdir -p $KRAKEN_WS \
+    && chown -R $USERNAME:$USERNAME $WORKSPACE
+
+USER $USERNAME
+
+
+# --- stack -------------------------------------------------------------------
+# Default target: sources baked in and built. What CI and docker compose use.
+
+FROM base AS stack
+
 COPY ros2_ws/src $KRAKEN_WS/src
 
 RUN . /opt/ros/${ROS_DISTRO}/setup.sh \
     && cd $KRAKEN_WS \
     && colcon build --symlink-install --event-handlers console_direct+
-
-RUN echo ". /opt/ros/${ROS_DISTRO}/setup.bash" >> /etc/bash.bashrc \
-    && echo ". $KRAKEN_WS/install/setup.bash" >> /etc/bash.bashrc
-
-WORKDIR $KRAKEN_WS
-CMD ["/bin/bash"]
