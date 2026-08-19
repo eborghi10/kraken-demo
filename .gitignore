@@ -1,0 +1,11 @@
+build/
+install/
+log/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+results/
+Project/build/
+Project/Cache/
+Project/user/

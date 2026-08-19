@@ -1,0 +1,55 @@
+# SPDX-License-Identifier: BSD-3-Clause
+#
+# Run everything from the repository root:
+#   docker compose -f docker/docker-compose.yml run --rm test
+#   docker compose -f docker/docker-compose.yml run --rm stack
+name: kraken-demo
+
+services:
+  # Light image: localisation, fault injection, headless sim, scenario tests.
+  stack: &stack
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.Stack
+    image: kraken_stack
+    network_mode: host
+    ipc: host
+    volumes:
+      - ../ros2_ws/src:/data/workspace/ros2_ws/src:ro
+      - ../results:/data/workspace/results
+    working_dir: /data/workspace/ros2_ws
+    stdin_open: true
+    tty: true
+
+  # One-shot: build then run the full scenario suite.
+  test:
+    <<: *stack
+    command: >
+      bash -lc "colcon build --symlink-install &&
+                . install/setup.bash &&
+                colcon test --packages-select kraken_scenarios --event-handlers console_direct+ &&
+                colcon test-result --all --verbose"
+
+  # Heavy image: O3DE editor / game launcher. Needs a GPU.
+  sim:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.Simulation
+    image: kraken_sim
+    network_mode: host
+    ipc: host
+    environment:
+      - DISPLAY=${DISPLAY}
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    stdin_open: true
+    tty: true

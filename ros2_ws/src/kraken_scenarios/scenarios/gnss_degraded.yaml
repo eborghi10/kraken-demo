@@ -1,0 +1,34 @@
+name: gnss_degraded
+profile: robust
+seed: 0
+description: >
+  RTK lock drops to a single-point solution: metre-level noise instead of
+  centimetre-level, and the receiver says so by inflating its covariance. The
+  filter should widen its own uncertainty and lean harder on dead reckoning
+  rather than chase the noise.
+
+  Position holds up well. Heading does not: with no absolute heading reference,
+  yaw is inferred from where GNSS says the robot went, and 2 m of noise on that
+  is 2 m of noise on the inference. Worst-case heading error reaches ~70 deg
+  mid-turn before settling back under 25 deg. That is a real weakness of this
+  configuration, so the scenario bounds the settled error and leaves the
+  transient visible rather than pretending it is fine.
+
+phases:
+  - {label: settle, duration: 15.0, linear: 0.8, angular: 0.0}
+  - {label: mark, action: mark_reference}
+  - label: degrade_gnss
+    action: set_fault
+    channel: gnss
+    mode: degrade
+    noise_stddev: 2.0
+    covariance_scale: 10000.0
+  - {label: straight, duration: 10.0, linear: 0.8, angular: 0.0}
+  - {label: turning, duration: 30.0, linear: 0.8, angular: 0.25}
+
+# Measured over 3 runs: worst position 1.73-1.96 m, settled heading 14-21 deg.
+expect:
+  max_position_error: 4.0
+  max_final_heading_error_deg: 40.0
+  min_path_length: 25.0
+  min_path_rotation_deg: 300.0

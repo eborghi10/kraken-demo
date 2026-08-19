@@ -1,0 +1,26 @@
+name: imu_dropout
+profile: robust
+seed: 0
+description: >
+  The redundancy tested the other way round: the gyro stops publishing while
+  GNSS stays healthy. Absolute position keeps the estimate honest, so position
+  barely moves -- half a metre across the whole run.
+
+  Heading is a different story. Without a gyro, yaw is only inferred from the
+  direction of travel, so it lags during the turn by up to ~30 deg before
+  catching up. Bounding the settled error rather than the peak is what makes
+  this scenario meaningful: the lag is expected, a permanent offset is not.
+
+phases:
+  - {label: settle, duration: 15.0, linear: 0.8, angular: 0.0}
+  - {label: mark, action: mark_reference}
+  - {label: kill_imu, action: set_fault, channel: imu, mode: dropout}
+  - {label: straight, duration: 10.0, linear: 0.8, angular: 0.0}
+  - {label: turning, duration: 30.0, linear: 0.8, angular: 0.25}
+
+# Measured over 3 runs: worst position 0.50-0.52 m, settled heading 6-15 deg.
+expect:
+  max_position_error: 2.0
+  max_final_heading_error_deg: 35.0
+  min_path_length: 25.0
+  min_path_rotation_deg: 300.0

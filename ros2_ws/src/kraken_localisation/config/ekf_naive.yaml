@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: BSD-3-Clause
+#
+# The "before" configuration, and the point of the whole demo.
+#
+# Wheel speed and GNSS position only. No gyro. While GNSS is healthy this
+# tracks well and looks perfectly fine, because heading is weakly observable
+# through the motion model as the robot drives. The moment the fix is lost,
+# heading has no measurement at all: the filter keeps whatever yaw rate it last
+# believed, and the estimate drives off in a straight line while the robot
+# turns. Run scenarios/total_gnss_dropout.yaml against this profile to watch it
+# happen.
+ekf_filter_node:
+  ros__parameters:
+    frequency: 30.0
+    sensor_timeout: 0.2
+    two_d_mode: true
+    publish_tf: true
+
+    map_frame: map
+    odom_frame: odom
+    base_link_frame: base_link
+    world_frame: map
+
+    # Wheel odometry: forward speed only.
+    odom0: /wheel/odom/faulted
+    odom0_config: [false, false, false,
+                   false, false, false,
+                   true,  false, false,
+                   false, false, false,
+                   false, false, false]
+    odom0_differential: false
+    odom0_relative: false
+    odom0_queue_size: 10
+
+    # GNSS, already projected into the map frame by navsat_transform.
+    odom1: /odometry/gps
+    odom1_config: [true,  true,  false,
+                   false, false, false,
+                   false, false, false,
+                   false, false, false,
+                   false, false, false]
+    odom1_differential: false
+    odom1_relative: false
+    odom1_queue_size: 10

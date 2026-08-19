@@ -1,0 +1,5 @@
+- O3DE Fruit Picker: https://github.com/o3de/ROSConDemo
+- localisation robustness after imu lost?
+- Navigation under heavy terrain, turns with trailer
+    - https://github.com/leggedrobotics/wild_visual_navigation
+    - https://github.com/karlkurzer/path_planner

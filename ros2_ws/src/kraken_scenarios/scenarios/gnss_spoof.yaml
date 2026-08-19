@@ -1,0 +1,30 @@
+name: gnss_spoof
+profile: robust
+seed: 0
+description: >
+  A fix that walks away at 0.2 m/s on a fixed bearing while still reporting
+  centimetre-level covariance -- a slow spoof, or a receiver silently switching
+  to a different correction source.
+
+  This scenario asserts that the estimate FOLLOWS the spoof, because it does:
+  the filter has no innovation gate, so a confident measurement is a trusted
+  measurement. It is a known gap, recorded as a test so that it is visible
+  rather than assumed. See docs/faults.md.
+
+phases:
+  - {label: settle, duration: 15.0, linear: 0.8, angular: 0.0}
+  - {label: mark, action: mark_reference}
+  - label: spoof_gnss
+    action: set_fault
+    channel: gnss
+    mode: bias_ramp
+    bias_rate: 0.2
+  - {label: straight, duration: 10.0, linear: 0.8, angular: 0.0}
+  - {label: turning, duration: 30.0, linear: 0.8, angular: 0.25}
+
+# Measured over 3 runs: the estimate ends up 7.9-8.1 m off, tracking the spoof
+# almost exactly. The bound asserts the failure, not the fix.
+expect:
+  min_position_error: 3.0
+  min_path_length: 25.0
+  min_path_rotation_deg: 300.0

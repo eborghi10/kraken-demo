@@ -1,0 +1,24 @@
+name: gnss_dropout_naive
+profile: naive
+seed: 0
+description: >
+  The same drive as total_gnss_dropout, against the filter that does not fuse
+  yaw rate. This scenario asserts that the estimate DIVERGES. It is not a bug
+  report, it is the control case: if someone "fixes" the naive profile without
+  understanding why it fails, this test tells them the comparison the demo is
+  built around has stopped being a comparison.
+
+phases:
+  - {label: settle, duration: 15.0, linear: 0.8, angular: 0.0}
+  - {label: mark, action: mark_reference}
+  - {label: kill_gnss, action: set_fault, channel: gnss, mode: dropout}
+  - {label: straight, duration: 10.0, linear: 0.8, angular: 0.0}
+  - {label: turning, duration: 30.0, linear: 0.8, angular: 0.25}
+
+# Measured over 3 runs: 21.9-22.1 m of position error and a heading that ends up
+# essentially reversed. The bound is set far below that, so this only goes green
+# if the naive filter genuinely stops failing.
+expect:
+  min_position_error: 10.0
+  min_path_length: 25.0
+  min_path_rotation_deg: 300.0

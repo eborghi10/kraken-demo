@@ -1,0 +1,91 @@
+# SPDX-License-Identifier: BSD-3-Clause
+#
+# O3DE simulation image. Follows the layout used by o3de/ROSConDemo's
+# docker/Dockerfile.Simulation.
+#
+# This build is heavy (tens of GB, hours) and the resulting image needs a GPU
+# and the NVIDIA container toolkit to run. The integration tests do NOT need
+# it -- use Dockerfile.Stack for those. Build this only when you want to drive
+# the demo through the O3DE scene.
+#
+# STATUS: the final cmake step will not succeed yet. Project/ holds only
+# project.json; the engine scaffolding and the level are not authored. See
+# Project/README.md. Everything in ros2_ws/ works today without O3DE.
+
+ARG ROS_VERSION=jazzy
+ARG UBUNTU_VERSION=noble
+
+FROM ros:${ROS_VERSION}-ros-base-${UBUNTU_VERSION}
+
+ENV WORKSPACE=/data/workspace
+ENV LANG=en_US.UTF-8
+ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+
+ARG O3DE_REPO=https://github.com/o3de/o3de.git
+ARG O3DE_BRANCH=development
+ENV O3DE_ROOT=$WORKSPACE/o3de
+
+ARG O3DE_EXTRAS_REPO=https://github.com/o3de/o3de-extras.git
+ARG O3DE_EXTRAS_BRANCH=development
+ENV O3DE_EXTRAS_ROOT=$WORKSPACE/o3de-extras
+
+ENV KRAKEN_ROOT=$WORKSPACE/kraken-demo
+ENV KRAKEN_PROJECT=$KRAKEN_ROOT/Project
+ENV KRAKEN_WS=$KRAKEN_ROOT/ros2_ws
+
+WORKDIR $WORKSPACE
+
+RUN apt-get update \
+    && DEBIAN_FRONTEND="noninteractive" apt-get -y install --no-install-recommends \
+        binutils clang cmake curl git git-lfs ninja-build \
+        libglu1-mesa-dev libxcb-xinerama0 libfontconfig1-dev \
+        libxcb-xkb-dev libxkbcommon-x11-dev libxkbcommon-dev \
+        libxcb-xfixes0-dev libxcb-xinput-dev libxcb-xinput0 libpcre2-16-0 \
+        locales python3-pip software-properties-common \
+        python3-colcon-common-extensions \
+        ros-${ROS_DISTRO}-ackermann-msgs \
+        ros-${ROS_DISTRO}-control-toolbox \
+        ros-${ROS_DISTRO}-cyclonedds \
+        ros-${ROS_DISTRO}-rmw-cyclonedds-cpp \
+        ros-${ROS_DISTRO}-robot-localization \
+        ros-${ROS_DISTRO}-rviz2 \
+        ros-${ROS_DISTRO}-tf2-ros \
+        ros-${ROS_DISTRO}-tf-transformations \
+        ros-${ROS_DISTRO}-urdfdom \
+        ros-${ROS_DISTRO}-vision-msgs \
+    && sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen \
+    && dpkg-reconfigure --frontend=noninteractive locales \
+    && update-locale LANG=en_US.UTF-8 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY . $KRAKEN_ROOT
+
+RUN . /opt/ros/${ROS_DISTRO}/setup.sh \
+    && git clone --single-branch -b $O3DE_BRANCH $O3DE_REPO $O3DE_ROOT \
+    && git -C $O3DE_ROOT lfs install && git -C $O3DE_ROOT lfs pull \
+    && git clone --single-branch -b $O3DE_EXTRAS_BRANCH $O3DE_EXTRAS_REPO $O3DE_EXTRAS_ROOT \
+    && git -C $O3DE_EXTRAS_ROOT lfs install && git -C $O3DE_EXTRAS_ROOT lfs pull \
+    && $O3DE_ROOT/python/get_python.sh \
+    && $O3DE_ROOT/scripts/o3de.sh register -ep $O3DE_ROOT \
+    && $O3DE_ROOT/scripts/o3de.sh register -gp $O3DE_EXTRAS_ROOT/Gems/ROS2 \
+    && $O3DE_ROOT/scripts/o3de.sh register -pp $KRAKEN_PROJECT
+
+RUN . /opt/ros/${ROS_DISTRO}/setup.sh \
+    && cd $KRAKEN_PROJECT \
+    && cmake -B build/linux -G"Ninja Multi-Config" \
+        -DLY_DISABLE_TEST_MODULES=ON -DLY_STRIP_DEBUG_SYMBOLS=ON \
+    && cmake --build build/linux --config profile \
+        --target KrakenDemo.GameLauncher Editor AssetProcessor KrakenDemo.Assets
+
+RUN . /opt/ros/${ROS_DISTRO}/setup.sh \
+    && cd $KRAKEN_WS \
+    && colcon build --symlink-install
+
+RUN echo ". /opt/ros/${ROS_DISTRO}/setup.bash" >> /etc/bash.bashrc \
+    && echo ". $KRAKEN_WS/install/setup.bash" >> /etc/bash.bashrc
+
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=all
+
+WORKDIR $KRAKEN_WS
+CMD ["/bin/bash"]

@@ -1,0 +1,19 @@
+fault_injector:
+  ros__parameters:
+    channels: ["gnss", "imu", "wheel"]
+
+    gnss:
+      type: navsat
+      input: /gnss/fix
+      output: /gnss/fix/faulted
+
+    imu:
+      type: imu
+      input: /imu/data
+      output: /imu/data/faulted
+
+    wheel:
+      type: odometry
+      input: /wheel/odom
+      output: /wheel/odom/faulted
+      publish_tf: true

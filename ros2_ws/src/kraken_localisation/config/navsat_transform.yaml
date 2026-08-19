@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: BSD-3-Clause
+#
+# Projects NavSatFix into the map frame. The datum must match the origin the
+# simulator uses, otherwise the estimate and the ground truth live in frames
+# offset by hundreds of kilometres and every error number is meaningless.
+navsat_transform:
+  ros__parameters:
+    frequency: 30.0
+    delay: 0.0
+    magnetic_declination_radians: 0.0
+    yaw_offset: 0.0
+    zero_altitude: true
+    broadcast_utm_transform: false
+    publish_filtered_gps: false
+
+    # Take heading from the IMU, not from the filter's own output, so a bad
+    # filter estimate cannot feed back into the GNSS projection.
+    use_odometry_yaw: false
+
+    wait_for_datum: true
+    datum: [52.2297, 21.0122, 0.0]

@@ -1,0 +1,14 @@
+{
+    "project_name": "KrakenDemo",
+    "display_name": "Kraken Localisation Robustness Demo",
+    "license": "BSD-3-Clause",
+    "origin": "https://github.com/o3de/ROSConDemo",
+    "summary": "Sensor fault injection and localisation scoring for ROS 2, in O3DE.",
+    "canonical_tags": ["Project"],
+    "user_tags": ["KrakenDemo", "Robotics", "ROS2"],
+    "icon_path": "preview.png",
+    "engine": "o3de",
+    "restricted_name": "projects",
+    "external_subdirectories": [],
+    "gem_names": ["ROS2"]
+}

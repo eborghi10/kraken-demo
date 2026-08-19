@@ -1,0 +1,57 @@
+# SPDX-License-Identifier: BSD-3-Clause
+#
+# The "after" configuration: identical to ekf_naive.yaml plus one extra
+# measurement, the IMU yaw rate.
+#
+# That single addition is what makes heading observable without GNSS. With it,
+# losing the fix degrades the estimate into ordinary dead reckoning, which
+# drifts slowly and predictably, instead of diverging.
+#
+# Note that absolute IMU yaw is deliberately NOT fused. Plenty of vehicles
+# carry a gyro but no usable magnetometer, and assuming an absolute heading
+# reference would hide the problem rather than solve it.
+ekf_filter_node:
+  ros__parameters:
+    frequency: 30.0
+    sensor_timeout: 0.2
+    two_d_mode: true
+    publish_tf: true
+
+    map_frame: map
+    odom_frame: odom
+    base_link_frame: base_link
+    world_frame: map
+
+    # Wheel odometry: forward speed only.
+    odom0: /wheel/odom/faulted
+    odom0_config: [false, false, false,
+                   false, false, false,
+                   true,  false, false,
+                   false, false, false,
+                   false, false, false]
+    odom0_differential: false
+    odom0_relative: false
+    odom0_queue_size: 10
+
+    # GNSS, already projected into the map frame by navsat_transform.
+    odom1: /odometry/gps
+    odom1_config: [true,  true,  false,
+                   false, false, false,
+                   false, false, false,
+                   false, false, false,
+                   false, false, false]
+    odom1_differential: false
+    odom1_relative: false
+    odom1_queue_size: 10
+
+    # The one line that matters: yaw rate.
+    imu0: /imu/data/faulted
+    imu0_config: [false, false, false,
+                  false, false, false,
+                  false, false, false,
+                  false, false, true,
+                  false, false, false]
+    imu0_differential: false
+    imu0_relative: false
+    imu0_queue_size: 10
+    imu0_remove_gravitational_acceleration: true

@@ -1,0 +1,4 @@
+FaultSpec fault
+---
+bool success
+string message

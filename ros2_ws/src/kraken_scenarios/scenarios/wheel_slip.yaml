@@ -1,0 +1,25 @@
+name: wheel_slip
+profile: robust
+seed: 0
+description: >
+  The wheels spin and the encoders report twice the motion that is actually
+  happening -- mud, wet grass, a slope. GNSS and the gyro are healthy, so the
+  filter has everything it needs to notice that the wheels are lying.
+
+phases:
+  - {label: settle, duration: 15.0, linear: 0.8, angular: 0.0}
+  - {label: mark, action: mark_reference}
+  - label: spin_wheels
+    action: set_fault
+    channel: wheel
+    mode: slip
+    slip_ratio: 2.0
+  - {label: straight, duration: 10.0, linear: 0.8, angular: 0.0}
+  - {label: turning, duration: 30.0, linear: 0.8, angular: 0.25}
+
+# Measured over 3 runs: worst position 0.17-0.63 m, worst heading 13-16 deg.
+expect:
+  max_position_error: 2.0
+  max_heading_error_deg: 30.0
+  min_path_length: 25.0
+  min_path_rotation_deg: 300.0

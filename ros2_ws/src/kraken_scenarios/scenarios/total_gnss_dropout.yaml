@@ -1,0 +1,22 @@
+name: total_gnss_dropout
+profile: robust
+seed: 0
+description: >
+  The headline case. The robot settles with a healthy RTK fix, the fix is then
+  lost completely, and it keeps driving and turning for another 40 s. With yaw
+  rate fused this degrades to ordinary dead reckoning and stays localised.
+
+phases:
+  - {label: settle, duration: 15.0, linear: 0.8, angular: 0.0}
+  - {label: mark, action: mark_reference}
+  - {label: kill_gnss, action: set_fault, channel: gnss, mode: dropout}
+  - {label: straight, duration: 10.0, linear: 0.8, angular: 0.0}
+  - {label: turning, duration: 30.0, linear: 0.8, angular: 0.25}
+
+# Measured over 3 runs: worst position 0.69-1.39 m, worst heading 1.9-2.5 deg.
+# Thresholds carry roughly 2x margin.
+expect:
+  max_position_error: 3.0
+  max_heading_error_deg: 8.0
+  min_path_length: 25.0
+  min_path_rotation_deg: 300.0

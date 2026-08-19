@@ -1,0 +1,68 @@
+# SPDX-License-Identifier: BSD-3-Clause
+#
+# Localisation + fault-injection + scenario stack, without O3DE.
+#
+# This is the image the integration tests run in. It has no GPU or graphics
+# dependency, so it also works in CI. Pair it with Dockerfile.Simulation when
+# you want the O3DE scene instead of the headless sim.
+
+ARG ROS_VERSION=jazzy
+ARG UBUNTU_VERSION=noble
+
+FROM ros:${ROS_VERSION}-ros-base-${UBUNTU_VERSION}
+
+ENV WORKSPACE=/data/workspace
+ENV KRAKEN_WS=$WORKSPACE/ros2_ws
+ENV LANG=en_US.UTF-8
+ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+
+# CycloneDDS defaults to multicast discovery, which is unreliable inside
+# containers. Everything in this image is single-host, so keep it on loopback.
+ENV CYCLONEDDS_URI=/etc/cyclonedds.xml
+
+WORKDIR $WORKSPACE
+
+RUN apt-get update \
+    && DEBIAN_FRONTEND="noninteractive" apt-get -y install --no-install-recommends \
+        locales \
+        python3-pip \
+        python3-pytest \
+        python3-colcon-common-extensions \
+        ros-${ROS_DISTRO}-cyclonedds \
+        ros-${ROS_DISTRO}-rmw-cyclonedds-cpp \
+        ros-${ROS_DISTRO}-robot-localization \
+        ros-${ROS_DISTRO}-tf2-ros \
+        ros-${ROS_DISTRO}-tf-transformations \
+        ros-${ROS_DISTRO}-launch-testing \
+        ros-${ROS_DISTRO}-launch-testing-ros \
+        ros-${ROS_DISTRO}-launch-pytest \
+    && sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen \
+    && dpkg-reconfigure --frontend=noninteractive locales \
+    && update-locale LANG=en_US.UTF-8 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN printf '%s\n' \
+    '<?xml version="1.0" encoding="UTF-8" ?>' \
+    '<CycloneDDS xmlns="https://cdds.io/config">' \
+    '  <Domain id="any">' \
+    '    <General>' \
+    '      <Interfaces><NetworkInterface address="127.0.0.1"/></Interfaces>' \
+    '      <AllowMulticast>false</AllowMulticast>' \
+    '    </General>' \
+    '    <Discovery><ParticipantIndex>auto</ParticipantIndex>' \
+    '      <Peers><Peer address="localhost"/></Peers>' \
+    '    </Discovery>' \
+    '  </Domain>' \
+    '</CycloneDDS>' > /etc/cyclonedds.xml
+
+COPY ros2_ws/src $KRAKEN_WS/src
+
+RUN . /opt/ros/${ROS_DISTRO}/setup.sh \
+    && cd $KRAKEN_WS \
+    && colcon build --symlink-install --event-handlers console_direct+
+
+RUN echo ". /opt/ros/${ROS_DISTRO}/setup.bash" >> /etc/bash.bashrc \
+    && echo ". $KRAKEN_WS/install/setup.bash" >> /etc/bash.bashrc
+
+WORKDIR $KRAKEN_WS
+CMD ["/bin/bash"]

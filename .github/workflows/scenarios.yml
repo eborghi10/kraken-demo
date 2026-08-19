@@ -1,0 +1,24 @@
+name: scenarios
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  launch-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the stack image
+        run: docker build -t kraken_stack -f docker/Dockerfile.Stack .
+
+      # No GPU and no O3DE: the scenarios run against the headless simulator.
+      - name: Run the scenario suite
+        run: |
+          docker run --rm --name kraken_ci kraken_stack bash -c '
+            source /opt/ros/jazzy/setup.bash &&
+            source install/setup.bash &&
+            colcon test --packages-select kraken_scenarios &&
+            colcon test-result --all --verbose'
