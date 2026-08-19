@@ -5,7 +5,8 @@
 The demo's subject is what the localisation filter does when its sensors go
 bad, not the fidelity of the vehicle model. O3DE gives a much better looking
 answer to the second question but needs a GPU, an authored level and a long
-build, none of which fit in CI. This node exposes the same topic contract
+build, none of which suit a suite you run on every change. This node exposes
+the same topic contract
 (ground truth, GNSS, IMU, wheel odometry) from a unicycle model so the
 scenarios can run headless and deterministically.
 

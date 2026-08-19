@@ -100,7 +100,7 @@ docker build -t kraken_stack \
   -f docker/Dockerfile.Stack .
 ```
 
-Only Jazzy is exercised in CI.
+Only Jazzy is exercised.
 
 ## Networking
 

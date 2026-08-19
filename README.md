@@ -130,7 +130,7 @@ biggest open piece of this repo.
 ## Repository layout
 
 ```
-docker/                 Dockerfile.Stack (light, CI) and Dockerfile.Simulation (O3DE, GPU)
+docker/                 Dockerfile.Stack (light, no GPU) and Dockerfile.Simulation (O3DE, GPU)
 Project/                O3DE project skeleton
 ros2_ws/src/
   kraken_interfaces/    FaultSpec, LocalisationScore, SetFault

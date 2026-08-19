@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //
-// Reuses the `dev` stage of docker/Dockerfile.Stack, so the devcontainer and CI
-// share one dependency list. The repository is mounted at /data/workspace to
-// match the paths used by docker-compose.yml and the images.
+// Reuses the `dev` stage of docker/Dockerfile.Stack, so the devcontainer and the
+// test image share one dependency list. The repository is mounted at
+// /data/workspace to match the paths used by docker-compose.yml and the images.
 {
   "name": "kraken-demo (ROS 2 Jazzy)",
 

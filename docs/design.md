@@ -7,7 +7,7 @@ the simulator. That decision buys three things:
 
 - The same scenarios run against O3DE, against the headless model, or against a
   recorded bag, because none of them need to know about it.
-- Faults are testable in CI without a GPU.
+- Faults are testable without a GPU, so the suite runs on any machine.
 - The filter under test is the real one, wired the real way. Nothing is stubbed.
 
 The cost is that faults are applied to *messages*, not to physics. `wheel_slip`
@@ -19,8 +19,8 @@ in the simulator for the reason given below.
 ## Why a headless simulator at all
 
 O3DE is the better demo and a worse test harness: it needs a GPU, an authored
-level, and a long build. The suite would then either not run in CI or run
-rarely, and a robustness suite that runs rarely is decoration.
+level, and a long build. The suite would then run rarely, and a robustness suite
+that runs rarely is decoration.
 
 `kraken_sim` is a unicycle model with about a hundred lines of physics in it.
 It owns `/clock`, so scenarios run at a configurable multiple of wall speed and

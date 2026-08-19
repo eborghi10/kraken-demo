@@ -3,12 +3,12 @@
 # Localisation + fault-injection + scenario stack, without O3DE.
 #
 # This is the image the integration tests run in. It has no GPU or graphics
-# dependency, so it also works in CI. Pair it with Dockerfile.Simulation when
+# dependency, so it runs anywhere. Pair it with Dockerfile.Simulation when
 # you want the O3DE scene instead of the headless sim.
 #
 #   base   dependencies only
 #   dev    base + editor tooling, used by .devcontainer (sources are mounted)
-#   stack  base + a baked build of ros2_ws, used by CI and docker compose
+#   stack  base + a baked build of ros2_ws, used by docker compose
 #
 # `stack` is last, so a build with no --target gives you that and skips `dev`.
 
@@ -103,7 +103,7 @@ USER $USERNAME
 
 
 # --- stack -------------------------------------------------------------------
-# Default target: sources baked in and built. What CI and docker compose use.
+# Default target: sources baked in and built. What docker compose uses.
 
 FROM base AS stack
 
