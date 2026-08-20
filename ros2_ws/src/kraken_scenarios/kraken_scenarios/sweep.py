@@ -59,11 +59,15 @@ def one_run(scenario, seed, report, simulator, timeout, namespace=''):
     if os.path.exists(report):
         os.remove(report)
 
+    command = ['ros2', 'launch', 'kraken_scenarios', 'scenario.launch.py',
+               'scenario:=%s' % scenario, 'report:=%s' % report,
+               'simulator:=%s' % simulator, 'seed:=%d' % seed]
+    if namespace:
+        # ros2 launch rejects a bare `namespace:=` rather than reading it as empty.
+        command.append('namespace:=%s' % namespace)
+
     proc = subprocess.Popen(
-        ['ros2', 'launch', 'kraken_scenarios', 'scenario.launch.py',
-         'scenario:=%s' % scenario, 'report:=%s' % report,
-         'simulator:=%s' % simulator, 'seed:=%d' % seed,
-         'namespace:=%s' % namespace],
+        command,
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         start_new_session=True)
     try:
