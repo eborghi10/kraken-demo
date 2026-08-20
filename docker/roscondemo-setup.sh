@@ -394,10 +394,40 @@ if [ -n "${stale_frames}" ]; then
 fi
 echo "robot frames -> ROS2FrameEditorComponent"
 
-# 15. Give the robot the sensors the localisation stack subscribes to, and the
-#     level the WGS84 origin that GNSS reports against. Which sensors, why
-#     those covariances, and why wheel odometry is not among them are all in
-#     the script.
+# 15. Give the project a wheel odometry sensor of its own.
+#
+#     The gem ships one, but it requires SkidSteeringModelService, and the
+#     Ackermann drive model leaves GetVelocityFromModel unimplemented, so on
+#     this robot it would never activate. Ours reads the drive wheels' measured
+#     rotation out of PhysX and the steered knuckles' measured angle out of
+#     their transforms. Measured rather than commanded is the whole point: a
+#     commanded velocity cannot slip, and surviving slip is what the
+#     localisation stack is for.
+ODOMETRY_DIR="${PROJECT}/Gem/Source/WheelOdometry"
+mkdir -p "${ODOMETRY_DIR}"
+cp "${SCRIPT_DIR}"/KrakenWheelOdometryComponent.{h,cpp} "${ODOMETRY_DIR}/"
+
+sed -i 's|^\( *\)Source/ROSConDemoModuleInterface.h|\1Source/WheelOdometry/KrakenWheelOdometryComponent.cpp\n\1Source/WheelOdometry/KrakenWheelOdometryComponent.h\n\1Source/ROSConDemoModuleInterface.h|' \
+    "${PROJECT}/Gem/roscondemo_files.cmake"
+
+sed -i \
+    -e 's|^#include "KrakenCamera/FollowingCameraComponent.h"|&\n#include "WheelOdometry/KrakenWheelOdometryComponent.h"|' \
+    -e 's|^\( *\)AppleKraken::FollowingCameraComponent::CreateDescriptor(),|&\n\1AppleKraken::KrakenWheelOdometryComponent::CreateDescriptor(),|' \
+    "${PROJECT}/Gem/Source/ROSConDemoModuleInterface.h"
+
+for marker in \
+    "KrakenWheelOdometryComponent.cpp:${PROJECT}/Gem/roscondemo_files.cmake" \
+    "KrakenWheelOdometryComponent::CreateDescriptor:${PROJECT}/Gem/Source/ROSConDemoModuleInterface.h"; do
+    if ! grep -q "${marker%%:*}" "${marker#*:}"; then
+        echo "ERROR: wheel odometry not registered in ${marker#*:}" >&2
+        exit 1
+    fi
+done
+echo "wheel odometry -> Gem/Source/WheelOdometry"
+
+# 16. Give the robot the sensors the localisation stack subscribes to, and the
+#     level the WGS84 origin that GNSS reports against. Which sensors and why
+#     those covariances are in the script.
 python3 "${SCRIPT_DIR}/kraken_sensors.py" "${PROJECT}"
 
 set +u

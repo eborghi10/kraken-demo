@@ -20,16 +20,18 @@ GNSS answers with a position on the WGS84 ellipsoid, which it gets by asking
 the Georeference bus where the level origin is, so the level needs an origin
 component or every fix reads as null island.
 
-Wheel odometry is deliberately absent. The gem's component requires
-SkidSteeringModelService and the Kraken is Ackermann, so it would never
-activate. That is the sensor that has to lie under slip, so it is worth doing
-properly rather than approximating with a drive model the robot does not have.
+Wheel odometry is the project's own component rather than the gem's, which
+requires SkidSteeringModelService and would never activate on an Ackermann
+robot. Its configuration is copied off the robot's own drive component so the
+two agree on which axles exist; the covariances it claims are its C++ defaults,
+because unlike the sensors above it is ours to set them on.
 
 Prefabs are read and written with simplejson and Decimal, the way the ROS 2
 Gem's own FrameConversion.py does it, so untouched floats round-trip as the
 literals they were written as rather than as the nearest repr.
 """
 
+import copy
 import hashlib
 import sys
 from decimal import Decimal
@@ -76,6 +78,30 @@ SENSORS = [
     ),
 ]
 
+# Measured off the prefab's own transforms: the front axle sits 2.2 m ahead of
+# the rear, the wheels 0.35 m either side of centre, and the axles ride 0.30 m
+# above the ground. The demo fills none of this in, so the drive model steers on
+# the class defaults of 2.0, 1.0 and 0.35 - close enough to drive with, but
+# odometry integrating a 0.35 m radius would over-report every metre by a sixth.
+GEOMETRY = {"Wheelbase": Decimal("2.2"), "Track": Decimal("0.7"), "WheelRadius": Decimal("0.3")}
+
+
+def wheel_odometry(components):
+    model = next(
+        c["m_template"]
+        for c in components.values()
+        if c.get("m_template", {}).get("$type") == "AckermannVehicleModelComponent"
+    )
+    configuration = copy.deepcopy(model["VehicleConfiguration"])
+    configuration["Wheelbase"] = GEOMETRY["Wheelbase"]
+    configuration["Track"] = GEOMETRY["Track"]
+    for axle in configuration["AxlesConfigurations"]:
+        axle["WheelRadius"] = GEOMETRY["WheelRadius"]
+    return {
+        "SensorConfiguration": sensor_configuration("50.0", "nav_msgs::msg::Odometry", "wheel/odom"),
+        "Vehicle configuration": configuration,
+    }
+
 
 def component_id(*parts):
     """Prefab component keys are unique uint64s. Derived from the name so that
@@ -102,7 +128,8 @@ def add_sensors(path):
     components = body["Components"]
     present = {c.get("m_template", {}).get("$type") for c in components.values()}
     added = []
-    for type_name, template in SENSORS:
+    sensors = SENSORS + [("KrakenWheelOdometryComponent", wheel_odometry(components))]
+    for type_name, template in sensors:
         if type_name in present:
             continue
         identifier = component_id(path.name, type_name)
