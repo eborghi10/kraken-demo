@@ -3,7 +3,7 @@
 # Projects NavSatFix into the map frame. The datum must match the origin the
 # simulator uses, otherwise the estimate and the ground truth live in frames
 # offset by hundreds of kilometres and every error number is meaningless.
-navsat_transform:
+/**:
   ros__parameters:
     frequency: 30.0
     delay: 0.0

@@ -68,6 +68,7 @@ class HeadlessSim(Node):
         self.declare_parameter('world_frame', 'world')
         self.declare_parameter('odom_frame', 'odom')
         self.declare_parameter('base_frame', 'base_link')
+        self.declare_parameter('imu_frame', 'imu_link')
 
         self._rate = self.get_parameter('rate_hz').value
         self._rtf = self.get_parameter('real_time_factor').value
@@ -75,6 +76,7 @@ class HeadlessSim(Node):
         self._world_frame = self.get_parameter('world_frame').value
         self._odom_frame = self.get_parameter('odom_frame').value
         self._base_frame = self.get_parameter('base_frame').value
+        self._imu_frame = self.get_parameter('imu_frame').value
         self._cmd_timeout = self.get_parameter('cmd_vel_timeout').value
 
         self._gnss_sigma = self.get_parameter('gnss_noise_stddev').value
@@ -220,7 +222,7 @@ class HeadlessSim(Node):
     def _publish_imu(self, w):
         msg = Imu()
         msg.header.stamp = self._stamp()
-        msg.header.frame_id = 'imu_link'
+        msg.header.frame_id = self._imu_frame
         yaw = self._yaw + self._random.gauss(0.0, self._imu_yaw_sigma)
         q = yaw_to_quaternion(yaw)
         msg.orientation.x = q[0]

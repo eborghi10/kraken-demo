@@ -15,7 +15,8 @@ def _actions(context):
     report = LaunchConfiguration('report').perform(context)
     simulator = LaunchConfiguration('simulator').perform(context)
     seed = LaunchConfiguration('seed').perform(context)
-    background, runner = scenario_actions(name, report, simulator, seed or None)
+    namespace = LaunchConfiguration('namespace').perform(context)
+    background, runner = scenario_actions(name, report, simulator, seed or None, namespace)
     return background + [runner]
 
 
@@ -29,5 +30,7 @@ def generate_launch_description():
                                           'the O3DE launcher to be running already'),
         DeclareLaunchArgument('seed', default_value='',
                               description="override the scenario's noise seed"),
+        DeclareLaunchArgument('namespace', default_value='',
+                              description='robot to run under, e.g. kraken1 for O3DE'),
         OpaqueFunction(function=_actions),
     ])

@@ -12,6 +12,7 @@ import math
 import os
 import sys
 import threading
+import time
 
 import rclpy
 import yaml
@@ -22,6 +23,7 @@ from nav_msgs.msg import Odometry
 from rclpy.action import ActionClient
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 from std_srvs.srv import Trigger
 
 from kraken_interfaces.msg import FaultSpec, LocalisationScore
@@ -58,13 +60,14 @@ class ScenarioRunner(Node):
         self._estimate = None
         self._reference = None
         self._navigation = None
-        self.create_subscription(LocalisationScore, '/scorer/score', self._on_score, 10)
-        self.create_subscription(Odometry, '/ground_truth/odom', self._on_truth, 10)
-        self.create_subscription(Odometry, '/odometry/filtered', self._on_estimate, 10)
-        self._cmd_pub = self.create_publisher(Twist, '/cmd_vel', 10)
-        self._set_fault = self.create_client(SetFault, '/fault_injector/set_fault')
-        self._mark_reference = self.create_client(Trigger, '/scorer/mark_reference')
-        self._navigate = ActionClient(self, NavigateToPose, '/navigate_to_pose')
+        self.create_subscription(LocalisationScore, 'scorer/score', self._on_score, 10)
+        self.create_subscription(Odometry, 'ground_truth/odom', self._on_truth,
+                                 qos_profile_sensor_data)
+        self.create_subscription(Odometry, 'odometry/filtered', self._on_estimate, 10)
+        self._cmd_pub = self.create_publisher(Twist, 'cmd_vel', 10)
+        self._set_fault = self.create_client(SetFault, 'fault_injector/set_fault')
+        self._mark_reference = self.create_client(Trigger, 'scorer/mark_reference')
+        self._navigate = ActionClient(self, NavigateToPose, 'navigate_to_pose')
 
     def _on_score(self, msg):
         self._score = msg
@@ -85,6 +88,17 @@ class ScenarioRunner(Node):
         if not response.success:
             raise RuntimeError('%s failed: %s' % (what, response.message))
         self.get_logger().info('%s: %s' % (what, response.message))
+
+    def _wait_for_clock(self):
+        # Under simulated time the clock reads zero until the first /clock
+        # message lands. The headless sim starts at zero too, so this never
+        # mattered; O3DE has usually been up for minutes by the time we attach,
+        # and a deadline computed against zero is already blown when the real
+        # time arrives. Wall sleep, because a rate on a stopped clock is one.
+        if not self.get_parameter('use_sim_time').value:
+            return
+        while rclpy.ok() and self.get_clock().now().nanoseconds == 0:
+            time.sleep(0.05)
 
     def _wait_for_stack(self):
         # The EKF needs a datum, a first fix and a first odometry message before
@@ -196,6 +210,7 @@ class ScenarioRunner(Node):
                           truth_in_reference[1] - goal_in_reference[1])
 
     def run(self):
+        self._wait_for_clock()
         self._rate = self.create_rate(self.get_parameter('command_rate_hz').value)
         self._wait_for_stack()
 

@@ -49,7 +49,7 @@ def _read_report(path, attempts=5):
     return None
 
 
-def one_run(scenario, seed, report, simulator, timeout):
+def one_run(scenario, seed, report, simulator, timeout, namespace=''):
     """Launch the stack once and return its report, or None if it never landed.
 
     `ros2 launch` does not exit when the runner finishes - the background nodes
@@ -62,7 +62,8 @@ def one_run(scenario, seed, report, simulator, timeout):
     proc = subprocess.Popen(
         ['ros2', 'launch', 'kraken_scenarios', 'scenario.launch.py',
          'scenario:=%s' % scenario, 'report:=%s' % report,
-         'simulator:=%s' % simulator, 'seed:=%d' % seed],
+         'simulator:=%s' % simulator, 'seed:=%d' % seed,
+         'namespace:=%s' % namespace],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         start_new_session=True)
     try:
@@ -108,6 +109,8 @@ def main(argv=None):
     parser.add_argument('--fixed-seed', action='store_true',
                         help='hold the seed at --seed-base to isolate scheduling jitter')
     parser.add_argument('--simulator', choices=('headless', 'o3de'), default='headless')
+    parser.add_argument('--namespace', default='',
+                        help='robot to run the stack under, e.g. kraken1 for o3de')
     parser.add_argument('--timeout', type=float, default=120.0,
                         help='seconds to wait for one run to produce a report')
     parser.add_argument('-o', '--output', help='write the aggregate JSON here')
@@ -119,7 +122,8 @@ def main(argv=None):
     for i in range(args.runs):
         seed = args.seed_base if args.fixed_seed else args.seed_base + i
         report = os.path.join(workdir, 'run_%02d.json' % i)
-        result = one_run(args.scenario, seed, report, args.simulator, args.timeout)
+        result = one_run(args.scenario, seed, report, args.simulator, args.timeout,
+                         args.namespace)
         if result is None:
             failures.append(i)
             print('run %2d  seed %-4d  FAILED' % (i, seed), flush=True)
@@ -148,6 +152,7 @@ def main(argv=None):
     aggregate = {
         'scenario': args.scenario,
         'simulator': args.simulator,
+        'namespace': args.namespace,
         'runs_requested': args.runs,
         'runs_completed': len(reports),
         'fixed_seed': args.fixed_seed,

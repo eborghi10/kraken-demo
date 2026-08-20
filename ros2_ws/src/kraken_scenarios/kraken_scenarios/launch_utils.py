@@ -10,9 +10,9 @@ import os
 
 import yaml
 from ament_index_python.packages import get_package_share_directory
-from launch.actions import IncludeLaunchDescription
+from launch.actions import GroupAction, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch_ros.actions import Node
+from launch_ros.actions import Node, PushRosNamespace
 
 
 def scenario_path(name):
@@ -25,7 +25,7 @@ def load_scenario(name):
         return yaml.safe_load(handle)
 
 
-def scenario_actions(name, report='', simulator='headless', seed=None):
+def scenario_actions(name, report='', simulator='headless', seed=None, namespace=''):
     """Return (background actions, scenario runner action) for one scenario.
 
     `simulator` picks who owns /clock and the sensor topics. 'headless' starts
@@ -34,6 +34,11 @@ def scenario_actions(name, report='', simulator='headless', seed=None):
 
     `seed` overrides the scenario's own seed, which is how the sweep tool walks
     a scenario across noise realisations.
+
+    `namespace` puts the whole stack under one robot, which is what O3DE needs:
+    it publishes `/<robot>/imu/data` and tags its TF frames `<robot>/base_link`.
+    Every topic in this stack is relative so that it can follow. TF stays global,
+    because there is only ever one tree.
     """
     if simulator not in ('headless', 'o3de'):
         raise ValueError("simulator must be 'headless' or 'o3de', got %r" % (simulator,))
@@ -41,6 +46,7 @@ def scenario_actions(name, report='', simulator='headless', seed=None):
     scenario = load_scenario(name)
     seed = scenario.get('seed', 0) if seed is None else int(seed)
     sim_time = {'use_sim_time': True}
+    prefix = namespace + '/' if namespace else ''
 
     channels = os.path.join(
         get_package_share_directory('kraken_faults'), 'config', 'channels.yaml')
@@ -49,7 +55,7 @@ def scenario_actions(name, report='', simulator='headless', seed=None):
 
     background = []
     if simulator == 'headless':
-        background.append(
+        background += [
             # The simulator owns /clock, so it is the one node that must not consume it.
             Node(
                 package='kraken_sim', executable='headless_sim', name='headless_sim',
@@ -61,9 +67,21 @@ def scenario_actions(name, report='', simulator='headless', seed=None):
                     # Flat ground unless the scenario says otherwise, so adding
                     # terrain cannot move the numbers of scenarios without it.
                     'terrain': json.dumps(scenario['terrain']) if 'terrain' in scenario else '',
+                    'world_frame': prefix + 'world',
+                    'odom_frame': prefix + 'odom',
+                    'base_frame': prefix + 'base_link',
+                    'imu_frame': prefix + 'imu_link',
                 }],
-            )
-        )
+            ),
+            # O3DE publishes its own sensor frames; the headless sim reports an
+            # IMU frame it never puts in TF.
+            Node(
+                package='tf2_ros', executable='static_transform_publisher', name='base_to_imu',
+                arguments=['--frame-id', prefix + 'base_link',
+                           '--child-frame-id', prefix + 'imu_link'],
+                parameters=[sim_time],
+            ),
+        ]
 
     background += [
         Node(
@@ -75,6 +93,7 @@ def scenario_actions(name, report='', simulator='headless', seed=None):
             launch_arguments={
                 'profile': scenario.get('profile', 'robust'),
                 'use_sim_time': 'true',
+                'frame_prefix': prefix,
             }.items(),
         ),
         Node(
@@ -89,7 +108,11 @@ def scenario_actions(name, report='', simulator='headless', seed=None):
         background.append(
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(navigation),
-                launch_arguments={'use_sim_time': 'true'}.items(),
+                launch_arguments={
+                    'use_sim_time': 'true',
+                    'namespace': namespace,
+                    'frame_prefix': prefix,
+                }.items(),
             )
         )
 
@@ -98,4 +121,8 @@ def scenario_actions(name, report='', simulator='headless', seed=None):
         output='screen',
         parameters=[dict(sim_time, scenario=scenario_path(name), report=report)],
     )
+
+    if namespace:
+        return ([GroupAction([PushRosNamespace(namespace), *background])],
+                GroupAction([PushRosNamespace(namespace), runner]))
     return background, runner

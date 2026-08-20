@@ -15,6 +15,7 @@ import rclpy
 from geometry_msgs.msg import TransformStamped, TwistWithCovarianceStamped
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import Imu, NavSatFix, NavSatStatus
 from std_srvs.srv import Trigger
 from tf2_ros import TransformBroadcaster
@@ -89,9 +90,13 @@ class FaultInjector(Node):
 
             channel = Channel(name, kind, self.get_parameter('%s.publish_tf' % name).value)
             channel.publisher = self.create_publisher(MSG_TYPES[kind], sink, 10)
+            # Sensor QoS on the way in, ordinary reliable QoS on the way out.
+            # O3DE publishes its sensors best effort, and a reliable
+            # subscriber is simply refused the connection; best effort accepts
+            # both simulators. What we republish is ours to guarantee.
             self.create_subscription(
                 MSG_TYPES[kind], source,
-                lambda msg, c=channel: self._relay(c, msg), 10)
+                lambda msg, c=channel: self._relay(c, msg), qos_profile_sensor_data)
             self._channels[name] = channel
             self.get_logger().info('channel %s (%s): %s -> %s' % (name, kind, source, sink))
 

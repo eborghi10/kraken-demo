@@ -14,6 +14,7 @@ import math
 import rclpy
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 from std_srvs.srv import Trigger
 
 from kraken_interfaces.msg import LocalisationScore
@@ -48,8 +49,8 @@ class Scorer(Node):
     def __init__(self):
         super().__init__('scorer')
 
-        self.declare_parameter('truth_topic', '/ground_truth/odom')
-        self.declare_parameter('estimate_topic', '/odometry/filtered')
+        self.declare_parameter('truth_topic', 'ground_truth/odom')
+        self.declare_parameter('estimate_topic', 'odometry/filtered')
         self.declare_parameter('publish_rate_hz', 10.0)
 
         self._truth = None
@@ -61,8 +62,12 @@ class Scorer(Node):
         self._worst_position = 0.0
         self._worst_heading = 0.0
 
+        # The truth comes from whichever simulator is running, and O3DE
+        # publishes best effort; the estimate comes from the EKF, which is
+        # reliable and worth keeping that way.
         self.create_subscription(
-            Odometry, self.get_parameter('truth_topic').value, self._on_truth, 10)
+            Odometry, self.get_parameter('truth_topic').value, self._on_truth,
+            qos_profile_sensor_data)
         self.create_subscription(
             Odometry, self.get_parameter('estimate_topic').value, self._on_estimate, 10)
         self._score_pub = self.create_publisher(LocalisationScore, '~/score', 10)

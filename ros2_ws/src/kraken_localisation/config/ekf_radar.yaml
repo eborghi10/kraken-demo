@@ -20,7 +20,7 @@
 # This is the one profile that is not a single measurement away from its
 # neighbour: it removes wheel forward speed and adds radar forward speed. That
 # is two lines, but one quantity, and the pairing is the point.
-ekf_filter_node:
+/**:
   ros__parameters:
     frequency: 30.0
     sensor_timeout: 0.2
@@ -35,7 +35,7 @@ ekf_filter_node:
     # Wheel odometry now contributes only the nonholonomic constraint: a
     # differential-drive base has no lateral velocity. That constraint stays
     # true under slip, because slip is forward, not sideways.
-    odom0: /wheel/odom/faulted
+    odom0: wheel/odom/faulted
     odom0_config: [false, false, false,
                    false, false, false,
                    false, true,  false,
@@ -46,7 +46,7 @@ ekf_filter_node:
     odom0_queue_size: 10
 
     # GNSS, already projected into the map frame by navsat_transform.
-    odom1: /odometry/gps
+    odom1: odometry/gps
     odom1_config: [true,  true,  false,
                    false, false, false,
                    false, false, false,
@@ -56,7 +56,7 @@ ekf_filter_node:
     odom1_relative: false
     odom1_queue_size: 10
 
-    imu0: /imu/data/faulted
+    imu0: imu/data/faulted
     imu0_config: [false, false, false,
                   false, false, false,
                   false, false, false,
@@ -68,7 +68,7 @@ ekf_filter_node:
     imu0_remove_gravitational_acceleration: true
 
     # Forward ground speed, measured off the ground rather than off the wheels.
-    twist0: /ground_speed/faulted
+    twist0: ground_speed/faulted
     twist0_config: [false, false, false,
                     false, false, false,
                     true,  false, false,

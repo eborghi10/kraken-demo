@@ -141,8 +141,26 @@ def add_sensors(path):
             "m_template": {"$type": type_name, **template},
         }
         added.append(type_name)
+    if stop_publishing_true_odometry(components):
+        added.append("ground truth odom transform off")
     write(path, data)
     return added
+
+
+def stop_publishing_true_odometry(components):
+    """The frame component on base_link has no ROS 2 frame above it, so it
+    publishes odom -> base_link from the entity's real world pose. Leaving that
+    on hands the filter the answer: the odom frame would be exact and no amount
+    of wheel slip could ever show up in it. Dead reckoning owns that edge."""
+    frame = next(
+        c
+        for c in components.values()
+        if c.get("$type") == "ROS2FrameEditorComponent"
+        and c["ROS2FrameConfiguration"].get("Frame Name") == "base_link"
+    )
+    was_publishing = frame["ROS2FrameConfiguration"].get("Publish Transform", True)
+    frame["ROS2FrameConfiguration"]["Publish Transform"] = False
+    return was_publishing
 
 
 def add_georeference(path):

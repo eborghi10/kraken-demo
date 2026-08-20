@@ -16,7 +16,7 @@ bt_navigator:
     use_sim_time: true
     global_frame: map
     robot_base_frame: base_link
-    odom_topic: /odometry/filtered
+    odom_topic: odometry/filtered
     bt_loop_duration: 10
     default_server_timeout: 20
     wait_for_service_timeout: 1000
@@ -25,7 +25,7 @@ controller_server:
   ros__parameters:
     use_sim_time: true
     controller_frequency: 20.0
-    odom_topic: /odometry/filtered
+    odom_topic: odometry/filtered
     # Jazzy defaults this to false; Kilted flips it. The simulator subscribes to
     # geometry_msgs/Twist, so pin it rather than inherit the distro's opinion.
     enable_stamped_cmd_vel: false

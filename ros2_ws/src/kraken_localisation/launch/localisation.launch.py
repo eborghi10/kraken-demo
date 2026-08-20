@@ -18,20 +18,21 @@ from launch_ros.actions import Node
 def _nodes(context):
     share = get_package_share_directory('kraken_localisation')
     profile = LaunchConfiguration('profile').perform(context)
+    prefix = LaunchConfiguration('frame_prefix').perform(context)
     use_sim_time = {'use_sim_time': LaunchConfiguration('use_sim_time')}
 
     ekf_config = os.path.join(share, 'config', 'ekf_%s.yaml' % profile)
     if not os.path.exists(ekf_config):
         raise RuntimeError('unknown profile %r, expected naive, robust or radar' % profile)
 
-    return [
-        Node(
-            package='tf2_ros',
-            executable='static_transform_publisher',
-            name='base_to_imu',
-            arguments=['--frame-id', 'base_link', '--child-frame-id', 'imu_link'],
-            parameters=[use_sim_time],
-        ),
+    # map is deliberately left unprefixed: two robots share one map, and each
+    # brings its own odom and base_link into it.
+    frames = {
+        'odom_frame': prefix + 'odom',
+        'base_link_frame': prefix + 'base_link',
+    }
+
+    nodes = [
         Node(
             package='robot_localization',
             executable='navsat_transform_node',
@@ -39,10 +40,10 @@ def _nodes(context):
             output='screen',
             parameters=[os.path.join(share, 'config', 'navsat_transform.yaml'), use_sim_time],
             remappings=[
-                ('imu', '/imu/data/faulted'),
-                ('gps/fix', '/gnss/fix/faulted'),
-                ('odometry/filtered', '/odometry/filtered'),
-                ('odometry/gps', '/odometry/gps'),
+                ('imu', 'imu/data/faulted'),
+                ('gps/fix', 'gnss/fix/faulted'),
+                ('odometry/filtered', 'odometry/filtered'),
+                ('odometry/gps', 'odometry/gps'),
             ],
         ),
         Node(
@@ -50,10 +51,12 @@ def _nodes(context):
             executable='ekf_node',
             name='ekf_filter_node',
             output='screen',
-            parameters=[ekf_config, use_sim_time],
-            remappings=[('odometry/filtered', '/odometry/filtered')],
+            parameters=[ekf_config, use_sim_time, frames],
+            remappings=[('odometry/filtered', 'odometry/filtered')],
         ),
     ]
+
+    return nodes
 
 
 def generate_launch_description():
@@ -62,5 +65,7 @@ def generate_launch_description():
                               choices=['naive', 'robust', 'radar'],
                               description='EKF tuning under test'),
         DeclareLaunchArgument('use_sim_time', default_value='true'),
+        DeclareLaunchArgument('frame_prefix', default_value='',
+                              description="TF frame prefix, e.g. 'kraken1/'"),
         OpaqueFunction(function=_nodes),
     ])
