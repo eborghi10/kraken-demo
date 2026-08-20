@@ -30,6 +30,9 @@ set -euo pipefail
 ROSCON_REPO="${ROSCON_REPO:-https://github.com/o3de/ROSConDemo.git}"
 ROSCON_ROOT="${ROSCON_ROOT:-/o3de/ROSConDemo}"
 BUILD_CONFIG="${BUILD_CONFIG:-profile}"
+# playground is the small level with two Krakens already placed; main is the
+# full orchard, which spawns its robots over ROS 2 and starts empty.
+DEMO_LEVEL="${DEMO_LEVEL:-playground}"
 
 env_hint="not set - run this inside the sim container as the default user (sudo and su drop the container environment)"
 : "${O3DE_ROOT:?${env_hint}}"
@@ -70,7 +73,9 @@ say "patching the project for this engine"
 # Patches are applied to a pristine checkout on every run. That makes this
 # idempotent without a pile of guards, and keeps the whole delta against
 # upstream visible with `git -C /o3de/ROSConDemo diff`.
-git -C "${ROSCON_ROOT}" checkout -- Project/project.json Project/Gem
+git -C "${ROSCON_ROOT}" checkout -- \
+    Project/project.json Project/Gem Project/Registry/autoexec.game.setreg \
+    Project/autoexec.cfg
 
 # 1. project.json: the engine version gate, and the enabled gem list.
 #
@@ -255,6 +260,102 @@ if [ -n "${stale}" ]; then
 fi
 echo "patch check -> no stale references to replaced APIs"
 
+# 10. Let go of the mouse.
+#
+#     The launcher confines the pointer with XFixes barriers and hides it, but
+#     xcb_xfixes_show_cursor fails with BadMatch in this container, so the
+#     cursor can be hidden and never restored - ImGui's ~ toggle asks for it
+#     back through the same failing call. Turning capture off skips the hide
+#     and the barriers entirely rather than depending on a call that fails.
+#     Not a .game.setreg: Editor game mode traps the cursor the same way.
+cat > "${PROJECT}/Registry/kraken_input.setreg" <<'JSON'
+{
+    "O3DE": {
+        "InputSystem": {
+            "Mouse": {
+                "CaptureMouseCursor": false
+            }
+        }
+    }
+}
+JSON
+echo "cursor capture -> off (XFixes show_cursor is broken here)"
+
+# 11. One level at startup, not three.
+#
+#     The project asks for a level twice, through two unrelated mechanisms:
+#     Registry/autoexec.game.setreg sets the LoadLevel console command, and
+#     Project/autoexec.cfg runs "loadlevel" again afterwards. Both ship
+#     pointing at main, so patching only the registry left the .cfg to put
+#     main back last - the launcher settled on the full orchard and deadlocked
+#     in Atom's draw packet collection behind a black window, with the main
+#     thread waiting on job workers that had nothing queued. Grep for the
+#     level name in both places, not just the registry.
+sed -i "s/\"LoadLevel\": *\"[^\"]*\"/\"LoadLevel\": \"${DEMO_LEVEL}\"/" \
+    "${PROJECT}/Registry/autoexec.game.setreg"
+sed -i "s/^[Ll]oad[Ll]evel .*/loadlevel ${DEMO_LEVEL}/" "${PROJECT}/autoexec.cfg"
+if ! grep -q "\"LoadLevel\": \"${DEMO_LEVEL}\"" "${PROJECT}/Registry/autoexec.game.setreg" \
+   || ! grep -qx "loadlevel ${DEMO_LEVEL}" "${PROJECT}/autoexec.cfg"; then
+    echo "ERROR: could not set the startup level in both autoexec files" >&2
+    exit 1
+fi
+echo "startup level -> ${DEMO_LEVEL} (registry and autoexec.cfg)"
+
+# 12. Put the lidar model back where its asset id says it lives.
+#
+#     LidarKraken.prefab refers to models/sensors/lidaros2/lidaros2.{azmodel,
+#     pxmesh}. Those shipped in ROS2 gem 2.x; 4.2.0 moved them to
+#     ROS2SampleRobots as Components/OS2Lidar/Models/LidarOS2.fbx. Enabling
+#     that gem does not help: O3DE hashes the source path (lowercased,
+#     relative to the scan folder) into the asset id, so a moved and renamed
+#     file gets a different id and the prefab reference stays dead. Copying it
+#     back to the old relative path inside any gem scan folder regenerates the
+#     original id. Without this the launcher aborts with "O3DE could not
+#     initialize correctly" on a blocking load of the missing .pxmesh.
+LIDAR_SRC="${O3DE_EXTRAS_ROOT}/Gems/ROS2SampleRobots/Assets/Components/OS2Lidar/Models"
+LIDAR_DST="${O3DE_EXTRAS_ROOT}/Gems/ROS2Sensors/Assets/models/sensors/lidaros2"
+if [[ -f "${LIDAR_SRC}/LidarOS2.fbx" ]]; then
+    mkdir -p "${LIDAR_DST}"
+    cp -f "${LIDAR_SRC}/LidarOS2.fbx" "${LIDAR_DST}/lidaros2.fbx"
+    cp -f "${LIDAR_SRC}/LidarOS2.fbx.assetinfo" "${LIDAR_DST}/lidaros2.fbx.assetinfo"
+    cp -rf "${LIDAR_SRC}/Materials" "${LIDAR_DST}/"
+    echo "lidar model -> models/sensors/lidaros2/lidaros2.fbx"
+else
+    echo "ERROR: ${LIDAR_SRC}/LidarOS2.fbx is missing; has o3de-extras moved it again?" >&2
+    exit 1
+fi
+
+# 13. Teach the asset pipeline to read Collada again.
+#
+#     All 24 meshes of the Kraken are .dae, and 2.7.0 dropped .dae from
+#     SceneAPI's supported extensions, so every one of them produced no
+#     product at all and the robot rendered as nothing. This array replaces
+#     the engine's rather than merging with it, so it has to repeat the
+#     built-in extensions; check Registry/sceneassetimporter.setreg upstream
+#     if a future engine adds a format and it stops being picked up.
+cat > "${PROJECT}/Registry/kraken_collada.setreg" <<'JSON'
+{
+    "O3DE": {
+        "SceneAPI": {
+            "AssetImporter": {
+                "SupportedFileTypeExtensions": [
+                    ".fbx",
+                    ".stl",
+                    ".gltf",
+                    ".glb",
+                    ".usd",
+                    ".usda",
+                    ".usdz",
+                    ".usdc",
+                    ".obj",
+                    ".dae"
+                ]
+            }
+        }
+    }
+}
+JSON
+echo "collada (.dae) -> enabled"
 
 set +u
 . "/opt/ros/${ROS_DISTRO}/setup.sh"

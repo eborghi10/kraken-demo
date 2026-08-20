@@ -46,7 +46,7 @@ ARG USERNAME=ubuntu
 # against the SimulationInterfaces gem instead.
 RUN apt-get update \
     && DEBIAN_FRONTEND="noninteractive" apt-get -y install --no-install-recommends \
-        binutils clang cmake curl git git-lfs ninja-build pkg-config \
+        binutils clang cmake curl gdb git git-lfs ninja-build pkg-config \
         libglu1-mesa-dev mesa-common-dev \
         libcurl4-openssl-dev libsdl2-dev zlib1g-dev \
         libunwind-dev libzstd-dev libssl-dev \

@@ -49,6 +49,10 @@ services:
     image: kraken_sim
     network_mode: host
     ipc: host
+    # A hung launcher is only diagnosable while it is still hung, and adding
+    # this later means recreating the container, which throws the hang away.
+    cap_add:
+      - SYS_PTRACE
     environment:
       - DISPLAY=${DISPLAY}
       - NVIDIA_VISIBLE_DEVICES=all
