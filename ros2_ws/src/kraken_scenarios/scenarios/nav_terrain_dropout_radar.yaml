@@ -22,17 +22,18 @@ phases:
   - {label: kill_gnss, action: set_fault, channel: gnss, mode: dropout}
   - {label: goto, action: navigate_to, x: 12.0, y: 4.0, timeout: 120.0}
 
-# Measured over 8 seeds: goal_error_estimated 0.321 +/- 0.012 (max 0.343),
-# goal_error_true 0.361 +/- 0.028 (max 0.408), path_length 12.43 +/- 0.03,
-# navigation_time 92.96 +/- 0.34 s, succeeded 8/8.
+# Measured over 8 seeds: goal_error_estimated 0.357 +/- 0.032 (max 0.412),
+# goal_error_true 0.297 +/- 0.057 (max 0.378), path_length 12.55 +/- 0.13,
+# navigation_time 63.68 +/- 1.13 s, succeeded 8/8.
 #
 # The two goal errors are asserted to the same bound. That is the whole claim:
 # with the radar the robot's account of where it is can be believed again, so
 # there is no longer a reason to hold truth to a looser tolerance than belief.
+# It lands at 0.297 against the baseline's 0.292, which is the same number.
 #
-# It takes 93 s against the baseline's 25 s, because it really is crossing
+# It takes 64 s against the baseline's 23 s, because it really is crossing
 # slippery ground and no sensor changes that. Arriving late is the honest
-# outcome; arriving in 25 s is what the version without a radar reports.
+# outcome; arriving in 23 s is what the version without a radar reports.
 expect:
   expect_navigation_succeeded: 1.0
   max_goal_error_estimated: 0.8

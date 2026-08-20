@@ -123,18 +123,22 @@ over the same ground. Across eight seeds:
 
 | | flat, healthy fix | slippery, no fix | slippery, **radar** |
 | --- | --- | --- | --- |
-| distance to goal, **believed** | 0.219 m | 0.167 m | 0.321 m |
-| distance to goal, **true** | 0.268 m | **5.327 m** | **0.361 m** |
-| ground actually covered | 12.53 m | 7.76 m | 12.43 m |
-| time to goal | 25.0 s | 60.6 s | 93.0 s |
-| Nav2 reported success | 8/8 | 5/8 | 8/8 |
+| distance to goal, **believed** | 0.241 m | 0.239 m | 0.357 m |
+| distance to goal, **true** | 0.292 m | **5.494 m** | **0.297 m** |
+| ground actually covered | 12.61 m | 7.31 m | 12.55 m |
+| time to goal | 22.7 s | 22.8 s | 63.7 s |
+| Nav2 reported success | 8/8 | 8/8 | 8/8 |
+
+(Measured on the headless kinematic sim, which scales commanded velocity by a
+traction factor. The same stack drives the O3DE fruit picker, where the physics
+is real; the mechanism carries over but these magnitudes will not.)
 
 The robot's own account of the run is unchanged — same believed goal error, same
 clean heading, same confident covariance — while it sits 5 m from where it was
 sent. Nav2 judges arrival from the estimate, because the estimate is the only
 thing it has, so a bias in the estimate moves the finish line with it and
-cancels out of every number the robot can check. It reported SUCCEEDED in five
-of the eight runs.
+cancels out of every number the robot can check. It reported SUCCEEDED in every
+one of the eight runs.
 
 This is why the suite scores against ground truth instead of against the filter,
 and why the scenario asserts on *both* goal errors at once: the failure is not

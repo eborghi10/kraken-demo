@@ -21,20 +21,22 @@ phases:
   - {label: kill_gnss, action: set_fault, channel: gnss, mode: dropout}
   - {label: goto, action: navigate_to, x: 12.0, y: 4.0, timeout: 120.0}
 
-# Measured over 8 seeds: goal_error_estimated 0.167 +/- 0.113 (max 0.253),
-# goal_error_true 5.327 +/- 0.076 (min 5.242), path_length 7.76 +/- 0.58.
+# Measured over 8 seeds: goal_error_estimated 0.239 +/- 0.006 (max 0.246),
+# goal_error_true 5.494 +/- 0.023 (min 5.462), path_length 7.31 +/- 0.05,
+# navigation_time 22.81 +/- 0.26 s, succeeded 8/8.
 #
 # The pair of goal bounds is the point of this scenario. The robot must still
 # believe it arrived, to the same tolerance nav_baseline passes, while actually
 # being metres short. Loosening either one alone would let the bug back in.
 #
-# navigation_succeeded is deliberately not asserted: Nav2 returned SUCCEEDED in
-# 5 of 8 runs and gave up in the other 3, so requiring either value would make
-# the test flaky. That it reports success at all, over half the time, while
-# 5 m from the goal is the finding. The spread is real and not a timing
-# artefact: it survives running the clock in real time, because MPPI's model
-# assumes commanded velocity is achieved and mispredicts every rollout.
+# navigation_succeeded used to be left unasserted, because Nav2 returned
+# SUCCEEDED in only 5 of 8 runs and requiring either value made the test flaky.
+# Once the controller was given the robot's real kinematics the outcome
+# settled: it now declares success in every run, 5.5 m from the goal. That is
+# the finding, and it is sharper for being reliable. MPPI assumes the commanded
+# velocity is achieved, so on slippery ground it mispredicts every rollout.
 expect:
+  expect_navigation_succeeded: 1.0
   max_goal_error_estimated: 0.6
   min_goal_error_true: 4.0
   max_goal_error_true: 7.0

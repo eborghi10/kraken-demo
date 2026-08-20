@@ -159,23 +159,27 @@ advances at the commanded speed while the robot advances at 45% of it. Over the
 
 | | flat, healthy fix | slippery, no fix | slippery, radar |
 | --- | --- | --- | --- |
-| `goal_error_estimated` | 0.219 +/- 0.089 | 0.167 +/- 0.113 | 0.321 +/- 0.012 |
-| `goal_error_true` | 0.268 +/- 0.084 | 5.327 +/- 0.076 | 0.361 +/- 0.028 |
-| `path_length` | 12.53 | 7.76 | 12.43 |
-| `navigation_time_s` | 24.95 | 60.55 | 92.96 |
-| Nav2 reported success | 8/8 | 5/8 | 8/8 |
+| `goal_error_estimated` | 0.241 +/- 0.033 | 0.239 +/- 0.006 | 0.357 +/- 0.032 |
+| `goal_error_true` | 0.292 +/- 0.034 | 5.494 +/- 0.023 | 0.297 +/- 0.057 |
+| `path_length` | 12.61 | 7.31 | 12.55 |
+| `navigation_time_s` | 22.73 | 22.81 | 63.68 |
+| Nav2 reported success | 8/8 | 8/8 | 8/8 |
+
+These are the headless kinematic sim, which scales commanded velocity by a
+traction factor. O3DE gives real friction and load transfer instead, so the
+mechanism carries over but these magnitudes will not.
 
 Take the middle column first. The believed error is the same as the control's
 to well inside its own spread, and is if anything slightly smaller. The true
-error is 20x worse. Every signal available to the robot -- the goal check, the
+error is 19x worse. Every signal available to the robot -- the goal check, the
 filter covariance, the encoders, the heading, which stays under 3 degrees --
 says the run went as well as the control run did. This is the second failure in
 this project that is invisible in heading and visible only in position; the
 first was the unobservable lateral velocity above, and both were found by
 scoring against ground truth rather than against the estimate.
 
-The spread is the other half of it. `goal_error_true` varies by 0.076 m across
-seeds, no more than the flat case's 0.084 m, so the miss is not noise that a
+The spread is the other half of it. `goal_error_true` varies by 0.023 m across
+seeds, less than the flat case's 0.034 m, so the miss is not noise that a
 longer run would average out. It is a systematic bias, reproducible to the
 centimetre, which is what makes it dangerous rather than merely inaccurate.
 
@@ -185,14 +189,14 @@ nothing in the stack is positioned to notice the estimate and the robot have
 parted company, because the only instrument that could notice is the fix, and
 the scenario removed it.
 
-`nav_terrain_dropout` deliberately does not assert on `navigation_succeeded`.
-Nav2 returned SUCCEEDED in 5 of 8 runs and gave up in the other 3, and the
-variation comes from MPPI: its model assumes the commanded velocity is achieved,
-so on slippery ground its rollouts mispredict and it sometimes thrashes near the
-goal until the progress checker fires. Asserting either outcome would make the
-test flaky. The scenario asserts the two goal errors instead, which are stable,
-and the fact that a giving-up controller still believes it is centimetres from
-the goal is recorded here rather than in a threshold.
+`nav_terrain_dropout` asserts on `navigation_succeeded`, which it did not always
+do. Nav2 used to return SUCCEEDED in only 5 of 8 runs, thrashing near the goal
+until the progress checker fired, and asserting either outcome would have made
+the test flaky. That variation turned out to be the controller being told it
+was a differential drive: given the robot's real kinematics it settles, and now
+declares success in all 8 runs while 5.5 m from the goal. The finding survived
+the fix and got sharper, because a controller that reliably believes it arrived
+is worse news than one that sometimes gives up.
 
 ## Why there is a ground-speed radar
 
@@ -207,21 +211,24 @@ GNSS would also catch it, but the scenario has removed GNSS, and that is the
 realistic case under canopy or in a headland shadow. The gyro sees rotation and
 is already correct. The encoders are, by construction, the thing being checked.
 
-With it, true error falls from 5.327 m to 0.361 m and, more to the point,
-belief and truth agree again: 0.321 against 0.361, a gap of 0.04 m where before
-it was 5.16 m. The robot's account of itself can be believed, which is a
-different and stronger property than the account being accurate.
+With it, true error falls from 5.494 m to 0.297 m and, more to the point,
+belief and truth agree again: 0.357 against 0.297, a gap of 0.06 m where before
+it was 5.26 m. The robot's account of itself can be believed, which is a
+different and stronger property than the account being accurate. The true error
+also lands on the control's 0.292 m, so the radar does not merely improve the
+slippery case, it recovers the flat one.
 
-The run takes 93 s where the control takes 25 s. That is the honest outcome:
-the ground really is slippery and no sensor changes that, so covering 12.4 m
-takes longer. Arriving late is what success looks like here. Arriving in 25 s is
+The run takes 64 s where the control takes 23 s. That is the honest outcome:
+the ground really is slippery and no sensor changes that, so covering 12.6 m
+takes longer. Arriving late is what success looks like here. Arriving in 23 s is
 what the version without the radar reports, and it is a lie.
 
-A side effect worth recording: the radar run is the most reproducible of the
-three, with navigation time varying by 0.34 s and path length by 0.03 m against
-the unaided slippery case's 49 s and 0.58 m. Once the estimate is right, MPPI's
-rollouts predict correctly again and the controller stops thrashing. Fixing the
-estimate stabilised the controller without touching the controller.
+An earlier version of this document claimed the radar run was the most
+reproducible of the three, and that fixing the estimate had stabilised the
+controller without touching it. Re-measuring after the controller was given the
+robot's real kinematics reversed that: the unaided slippery case is now the
+tightest of the three, at 0.26 s and 0.05 m. The thrashing was never the
+estimate's doing. It was MPPI planning for a robot that could pivot.
 
 ### Why the radar replaces the wheels rather than joining them
 
