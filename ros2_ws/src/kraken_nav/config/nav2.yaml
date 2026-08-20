@@ -238,7 +238,11 @@ planner_server:
       max_iterations: 1000000
       max_on_approach_iterations: 1000
       max_planning_time: 5.0
-      motion_model_for_search: "DUBIN"
+      # Dubin paths are forward-only, so a near miss can only be corrected by
+      # driving a full 2.61 m-radius circle: two runs in eight overshot by
+      # 0.65 m and spent 20 s and 33 m coming back round. The robot reverses,
+      # so let the planner say so; reverse_penalty keeps it a last resort.
+      motion_model_for_search: "REEDS_SHEPP"
       angle_quantization_bins: 72
       analytic_expansion_ratio: 3.5
       analytic_expansion_max_length: 3.0
