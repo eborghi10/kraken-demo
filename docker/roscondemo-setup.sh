@@ -30,6 +30,7 @@ set -euo pipefail
 ROSCON_REPO="${ROSCON_REPO:-https://github.com/o3de/ROSConDemo.git}"
 ROSCON_ROOT="${ROSCON_ROOT:-/o3de/ROSConDemo}"
 BUILD_CONFIG="${BUILD_CONFIG:-profile}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # playground is the small level with two Krakens already placed; main is the
 # full orchard, which spawns its robots over ROS 2 and starts empty.
 DEMO_LEVEL="${DEMO_LEVEL:-playground}"
@@ -80,6 +81,7 @@ git -C "${ROSCON_ROOT}" checkout -- \
     Project/Assets/Kraken/apple_kraken_v1/apple_kraken_v1.prefab \
     Project/Assets/Kraken/apple_kraken_v2/apple_kraken_v2.prefab \
     Project/Assets/Importer/myfirst.prefab \
+    Project/Levels/Main/Main.prefab \
     Project/Levels/playground/playground.prefab
 
 # 1. project.json: the engine version gate, and the enabled gem list.
@@ -108,9 +110,13 @@ with open(project_path) as fh:
 
 # enabled_gems.cmake, translated to names this engine actually ships, plus the
 # gems the ROS 2 Gem split created.
+# LevelGeoreferencing is not part of that split and the demo never asked for
+# it, but the GNSS sensor added further down reports its position through the
+# Georeference bus, and with no handler for that bus every fix reads as the
+# origin of the WGS84 ellipsoid.
 gems = [
     "ROSConDemo",
-    "ROS2", "ROS2Controllers", "ROS2Sensors",
+    "ROS2", "ROS2Controllers", "ROS2Sensors", "LevelGeoreferencing",
     "Atom", "Atom_Feature_Common", "CommonFeaturesAtom", "Atom_AtomBridge",
     "PhysX5", "PhysXCommon", "ScriptCanvasPhysics",
     "LmbrCentral", "AudioSystem", "CameraFramework", "DebugDraw",
@@ -387,6 +393,12 @@ if [ -n "${stale_frames}" ]; then
     exit 1
 fi
 echo "robot frames -> ROS2FrameEditorComponent"
+
+# 15. Give the robot the sensors the localisation stack subscribes to, and the
+#     level the WGS84 origin that GNSS reports against. Which sensors, why
+#     those covariances, and why wheel odometry is not among them are all in
+#     the script.
+python3 "${SCRIPT_DIR}/kraken_sensors.py" "${PROJECT}"
 
 set +u
 . "/opt/ros/${ROS_DISTRO}/setup.sh"
