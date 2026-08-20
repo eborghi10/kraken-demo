@@ -75,7 +75,12 @@ say "patching the project for this engine"
 # upstream visible with `git -C /o3de/ROSConDemo diff`.
 git -C "${ROSCON_ROOT}" checkout -- \
     Project/project.json Project/Gem Project/Registry/autoexec.game.setreg \
-    Project/autoexec.cfg
+    Project/autoexec.cfg \
+    Project/Prefabs/LidarKraken.prefab \
+    Project/Assets/Kraken/apple_kraken_v1/apple_kraken_v1.prefab \
+    Project/Assets/Kraken/apple_kraken_v2/apple_kraken_v2.prefab \
+    Project/Assets/Importer/myfirst.prefab \
+    Project/Levels/playground/playground.prefab
 
 # 1. project.json: the engine version gate, and the enabled gem list.
 #
@@ -356,6 +361,32 @@ cat > "${PROJECT}/Registry/kraken_collada.setreg" <<'JSON'
 }
 JSON
 echo "collada (.dae) -> enabled"
+
+# 14. Move the robot's frames onto the component that still reads them.
+#
+#     ROS2FrameComponent became ROS2FrameEditorComponent and its fields moved
+#     under a nested ROS2FrameConfiguration. A prefab field that no longer
+#     matches is dropped in silence, so all 13 frames per robot fell back to
+#     the default name: every transform published sensor_frame -> sensor_frame,
+#     its own parent, and no base_link existed at all. The gem ships the
+#     migration. playground is in the list because it patches those fields
+#     from the level rather than declaring the component itself.
+FRAME_CONV="${O3DE_EXTRAS_ROOT}/Gems/ROS2/Code/Source/Frame/Conversions/FrameConversion.py"
+for prefab in \
+    "${PROJECT}/Prefabs/LidarKraken.prefab" \
+    "${PROJECT}/Assets/Kraken/apple_kraken_v1/apple_kraken_v1.prefab" \
+    "${PROJECT}/Assets/Kraken/apple_kraken_v2/apple_kraken_v2.prefab" \
+    "${PROJECT}/Assets/Importer/myfirst.prefab" \
+    "${PROJECT}/Levels/playground/playground.prefab"; do
+    python3 "${FRAME_CONV}" "${prefab}" > /dev/null
+done
+stale_frames=$(grep -rl '"ROS2FrameComponent"' "${PROJECT}" --include='*.prefab' || true)
+if [ -n "${stale_frames}" ]; then
+    echo "ERROR: prefabs still declare the old frame component:" >&2
+    printf '%s\n' "${stale_frames}" >&2
+    exit 1
+fi
+echo "robot frames -> ROS2FrameEditorComponent"
 
 set +u
 . "/opt/ros/${ROS_DISTRO}/setup.sh"

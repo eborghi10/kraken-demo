@@ -63,6 +63,7 @@ RUN apt-get update \
         libvulkan1 vulkan-tools \
         locales python3-pip software-properties-common sudo \
         python3-colcon-common-extensions \
+        python3-simplejson \
         ros-${ROS_DISTRO}-ackermann-msgs \
         ros-${ROS_DISTRO}-control-toolbox \
         ros-${ROS_DISTRO}-cyclonedds \
