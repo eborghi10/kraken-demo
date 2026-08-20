@@ -3,13 +3,13 @@
 # Nav2 tuning for the flat headless sim: Smac Hybrid-A* global planner, MPPI
 # local controller.
 #
-# Deliberate omissions, all of which change once terrain lands:
-#   * No map_server and no static layer. Both costmaps are rolling windows of
-#     empty space, so the planner sees the world as uniformly traversable.
-#   * No obstacle or voxel layer, because the simulator publishes no ranging
-#     sensor. The inflation layer is present only because ROS 2 cannot type an
-#     empty `plugins` list; with no obstacles it has nothing to inflate.
-#   * MPPI runs without CostCritic for the same reason.
+# Deliberate omissions:
+#   * No map_server and no static layer. Both costmaps are rolling windows, so
+#     the world is remembered only as far back as the window reaches.
+#
+# The obstacle layer reads the O3DE robot's lidar. The headless sim carries no
+# ranging sensor, so there the layer simply never receives an observation and
+# the costmaps stay empty, as they always were.
 
 bt_navigator:
   ros__parameters:
@@ -45,7 +45,11 @@ controller_server:
     general_goal_checker:
       plugin: "nav2_controller::SimpleGoalChecker"
       xy_goal_tolerance: 0.25
-      yaw_goal_tolerance: 0.25
+      # A steered robot reaches a heading only by driving to it, so holding it
+      # to one it was never asked for turns arriving into an endless circuit.
+      # The scenarios score the position they reach; when a task genuinely
+      # needs a heading it should say so in the goal.
+      yaw_goal_tolerance: 3.15
       stateful: true
 
     FollowPath:
@@ -71,17 +75,34 @@ controller_server:
       transform_tolerance: 0.1
       temperature: 0.3
       gamma: 0.015
-      motion_model: "DiffDrive"
+      # The Kraken steers; it cannot pivot. Told it was a differential drive,
+      # MPPI opens every plan with a rotation in place, which a steered robot
+      # answers by standing still, and then it never gets going at all. The
+      # radius is the robot's own: wheelbase 2.2 m over tan(0.7 rad), the
+      # steering limit the drive model falls back on.
+      motion_model: "Ackermann"
+      AckermannConstraints:
+        min_turning_r: 2.61
       visualize: false
       regenerate_noises: true
       critics: [
-        "ConstraintCritic", "GoalCritic", "GoalAngleCritic",
+        "ConstraintCritic", "CostCritic", "GoalCritic", "GoalAngleCritic",
         "PathAlignCritic", "PathFollowCritic", "PathAngleCritic",
         "PreferForwardCritic"]
       ConstraintCritic:
         enabled: true
         cost_power: 1
         cost_weight: 4.0
+      CostCritic:
+        enabled: true
+        cost_power: 1
+        cost_weight: 3.81
+        critical_cost: 300.0
+        # The machine is 3.1 m long and pivots about its rear axle, so a
+        # circular approximation is either useless or paralysing.
+        consider_footprint: true
+        collision_cost: 1000000.0
+        near_goal_distance: 1.0
       GoalCritic:
         enabled: true
         cost_power: 1
@@ -130,16 +151,38 @@ local_costmap:
       global_frame: odom
       robot_base_frame: base_link
       rolling_window: true
-      width: 6
-      height: 6
+      # Wide enough to hold a 3.1 m robot and the 2.6 m radius it turns on.
+      width: 14
+      height: 14
       resolution: 0.1
-      # Placeholder until there is a URDF; nothing collides with it yet.
-      robot_radius: 0.35
-      plugins: ["inflation_layer"]
+      # Measured off the prefab's colliders. base_link is the rear axle, not the
+      # centre of the machine, so the box is not symmetric: the body runs 0.6 m
+      # behind it and 2.5 m ahead, and the tyres are the widest point at 0.45 m.
+      footprint: "[ [2.5, 0.45], [2.5, -0.45], [-0.6, -0.45], [-0.6, 0.45] ]"
+      plugins: ["obstacle_layer", "inflation_layer"]
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: true
+        observation_sources: lidar
+        lidar:
+          topic: pc
+          data_type: "PointCloud2"
+          marking: true
+          clearing: true
+          # Two thirds of the cloud is ground return, and the lidar sits 0.97 m
+          # up, so anything below knee height is the floor rather than a trunk.
+          min_obstacle_height: 0.30
+          max_obstacle_height: 2.0
+          obstacle_max_range: 20.0
+          obstacle_min_range: 0.0
+          raytrace_max_range: 25.0
+          raytrace_min_range: 0.0
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 3.0
-        inflation_radius: 0.55
+        # Must clear the footprint's circumscribed radius of 2.55 m, or nav2
+        # falls back from footprint collision checking to a circle.
+        inflation_radius: 2.8
       always_send_full_costmap: true
 
 global_costmap:
@@ -156,13 +199,28 @@ global_costmap:
       width: 60
       height: 60
       resolution: 0.1
-      robot_radius: 0.35
+      footprint: "[ [2.5, 0.45], [2.5, -0.45], [-0.6, -0.45], [-0.6, 0.45] ]"
       track_unknown_space: false
-      plugins: ["inflation_layer"]
+      plugins: ["obstacle_layer", "inflation_layer"]
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: true
+        observation_sources: lidar
+        lidar:
+          topic: pc
+          data_type: "PointCloud2"
+          marking: true
+          clearing: true
+          min_obstacle_height: 0.30
+          max_obstacle_height: 2.0
+          obstacle_max_range: 20.0
+          obstacle_min_range: 0.0
+          raytrace_max_range: 25.0
+          raytrace_min_range: 0.0
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 3.0
-        inflation_radius: 0.55
+        inflation_radius: 2.8
       always_send_full_costmap: true
 
 planner_server:
@@ -184,10 +242,9 @@ planner_server:
       angle_quantization_bins: 72
       analytic_expansion_ratio: 3.5
       analytic_expansion_max_length: 3.0
-      # The base is a unicycle and can spin in place, so this is a path
-      # smoothness choice, not a kinematic limit. It becomes a real constraint
-      # once the trailer is modelled.
-      minimum_turning_radius: 0.5
+      # The robot's own: wheelbase 2.2 m over tan(0.7 rad). Planning anything
+      # tighter hands the controller a path it cannot steer.
+      minimum_turning_radius: 2.61
       reverse_penalty: 2.0
       change_penalty: 0.0
       non_straight_penalty: 1.2
@@ -212,9 +269,9 @@ behavior_server:
     local_footprint_topic: local_costmap/published_footprint
     global_footprint_topic: global_costmap/published_footprint
     cycle_frequency: 10.0
-    behavior_plugins: ["spin", "backup", "drive_on_heading", "wait"]
-    spin:
-      plugin: "nav2_behaviors::Spin"
+    # No spin: a steered robot cannot turn on the spot, so offering it as a
+    # recovery only burns the time budget standing still.
+    behavior_plugins: ["backup", "drive_on_heading", "wait"]
     backup:
       plugin: "nav2_behaviors::BackUp"
     drive_on_heading:

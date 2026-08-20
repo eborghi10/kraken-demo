@@ -61,6 +61,17 @@ def _nodes(context):
         os.path.join(get_package_share_directory('kraken_nav'), 'config', 'nav2.yaml'),
         namespace, prefix)
 
+    # Passed as their own dict because the values are absolute paths only known
+    # at launch time. Both trees drop nav2's Spin recovery, which this robot
+    # cannot perform; bt_navigator loads both, so both have to be replaced.
+    trees = os.path.join(get_package_share_directory('kraken_nav'), 'behavior_trees')
+    behavior_trees = {
+        'default_nav_to_pose_bt_xml': os.path.join(
+            trees, 'navigate_to_pose_ackermann.xml'),
+        'default_nav_through_poses_bt_xml': os.path.join(
+            trees, 'navigate_through_poses_ackermann.xml'),
+    }
+
     return [
         Node(package='nav2_controller', executable='controller_server', name='controller_server',
              output='screen', parameters=[params, use_sim_time]),
@@ -69,7 +80,7 @@ def _nodes(context):
         Node(package='nav2_behaviors', executable='behavior_server', name='behavior_server',
              output='screen', parameters=[params, use_sim_time]),
         Node(package='nav2_bt_navigator', executable='bt_navigator', name='bt_navigator',
-             output='screen', parameters=[params, use_sim_time]),
+             output='screen', parameters=[params, use_sim_time, behavior_trees]),
         Node(
             package='nav2_lifecycle_manager', executable='lifecycle_manager',
             name='lifecycle_manager_navigation', output='screen',
