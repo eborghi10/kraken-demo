@@ -82,6 +82,15 @@ def scenario_actions(name, report='', simulator='headless', seed=None, namespace
                 parameters=[sim_time],
             ),
         ]
+    else:
+        # The headless sim takes Twist directly. The O3DE robot is steered, not
+        # commanded a yaw rate, so everything upstream of it needs translating.
+        background.append(
+            Node(
+                package='kraken_sim', executable='ackermann_bridge', name='ackermann_bridge',
+                output='screen', parameters=[sim_time],
+            )
+        )
 
     background += [
         Node(

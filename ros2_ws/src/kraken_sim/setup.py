@@ -14,11 +14,14 @@ setup(
     zip_safe=True,
     maintainer='Emiliano Borghi',
     maintainer_email='emiliano.borghi@example.com',
-    description='Headless kinematic simulator used in place of O3DE for automated scenarios.',
+    description='Headless kinematic simulator used in place of O3DE for automated '
+                'scenarios, and the bridge that adapts Twist commands to the O3DE '
+                "robot's Ackermann control interface.",
     license='BSD-3-Clause',
     entry_points={
         'console_scripts': [
             'headless_sim = kraken_sim.headless_sim:main',
+            'ackermann_bridge = kraken_sim.ackermann_bridge:main',
         ],
     },
 )
