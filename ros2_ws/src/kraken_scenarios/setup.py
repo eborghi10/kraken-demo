@@ -27,6 +27,7 @@ setup(
             'scorer = kraken_scenarios.scorer:main',
             'scenario_runner = kraken_scenarios.scenario_runner:main',
             'sim_admin = kraken_scenarios.sim_admin:main',
+            'orchard_coverage = kraken_scenarios.orchard_coverage:main',
             'sweep = kraken_scenarios.sweep:main',
         ],
     },
