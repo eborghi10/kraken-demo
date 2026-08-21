@@ -9,6 +9,7 @@ find_package(std_msgs REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/FaultSpec.msg"
   "msg/LocalisationScore.msg"
+  "msg/RowEstimate.msg"
   "srv/SetFault.srv"
   DEPENDENCIES builtin_interfaces std_msgs
 )

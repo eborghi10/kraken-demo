@@ -1,0 +1,18 @@
+/**:
+  ros__parameters:
+    # Tuned against the RGL (mesh) lidar in the ROSConDemo orchard. RGL raycasts
+    # visual geometry, so what comes back is the canopy surface, not the bare
+    # trunks a collider-based lidar reported. Each cluster is therefore a whole
+    # tree, roughly 1.3-1.5 m across and 1.3 m deep in the trunk band.
+    max_trunk_width: 1.80
+    min_trunk_extent: 0.40
+    min_cluster_points: 15
+
+    # Only three or four trees per side stay unoccluded, so the line fit has to
+    # accept a shorter, sparser run than the trunk-based version needed.
+    min_trunks: 2
+    min_span: 3.0
+    max_range: 16.0
+
+    # Canopy centroids scatter about the row line far more than trunk centres do.
+    max_residual: 0.60
