@@ -1,0 +1,15 @@
+diff --git a/Code/CMakeLists.txt b/Code/CMakeLists.txt
+index c04b318..6d8e2a8 100644
+--- a/Code/CMakeLists.txt
++++ b/Code/CMakeLists.txt
+@@ -123,3 +123,10 @@ if(PAL_TRAIT_BUILD_HOST_TOOLS)
+     ly_create_alias(NAME RGL.Tools    NAMESPACE Gem TARGETS Gem::RGL.Editor)
+     ly_create_alias(NAME RGL.Builders NAMESPACE Gem TARGETS Gem::RGL.Editor)
+ endif()
++
++# kraken-demo: toolchain compatibility
++foreach(rgl_target RGL.Static RGL RGL.Editor.Static RGL.Editor)
++    if(TARGET ${rgl_target})
++        target_compile_options(${rgl_target} PRIVATE -Wno-pessimizing-move)
++    endif()
++endforeach()

@@ -44,6 +44,8 @@ ARG USERNAME=ubuntu
 # unable to spawn Krakens -- ROSConDemo drives spawning over
 # gazebo_msgs/srv/SpawnEntity. Dropping it means re-authoring the level prefabs
 # against the SimulationInterfaces gem instead.
+#
+# radar-msgs is a runtime requirement of the RGL (Robotec GPU Lidar) gem.
 RUN apt-get update \
     && DEBIAN_FRONTEND="noninteractive" apt-get -y install --no-install-recommends \
         binutils clang cmake curl gdb git git-lfs ninja-build pkg-config \
@@ -68,6 +70,7 @@ RUN apt-get update \
         ros-${ROS_DISTRO}-control-toolbox \
         ros-${ROS_DISTRO}-cyclonedds \
         ros-${ROS_DISTRO}-gazebo-msgs \
+        ros-${ROS_DISTRO}-radar-msgs \
         ros-${ROS_DISTRO}-rmw-cyclonedds-cpp \
         ros-${ROS_DISTRO}-robot-localization \
         ros-${ROS_DISTRO}-rviz2 \

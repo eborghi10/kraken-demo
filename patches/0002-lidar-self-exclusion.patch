@@ -1,0 +1,96 @@
+diff --git a/Gems/ROS2Sensors/Code/Source/Lidar/LidarCore.cpp b/Gems/ROS2Sensors/Code/Source/Lidar/LidarCore.cpp
+index fffa053a..d075c044 100644
+--- a/Gems/ROS2Sensors/Code/Source/Lidar/LidarCore.cpp
++++ b/Gems/ROS2Sensors/Code/Source/Lidar/LidarCore.cpp
+@@ -8,7 +8,10 @@
+ 
+ #include <Atom/RPI.Public/AuxGeom/AuxGeomFeatureProcessorInterface.h>
+ #include <Atom/RPI.Public/Scene.h>
++#include <AzCore/Component/TransformBus.h>
++#include <AzCore/std/algorithm.h>
+ #include <AzFramework/Components/TransformComponent.h>
++#include <ROS2/Frame/ROS2FrameComponent.h>
+ #include <AzFramework/Physics/PhysicsSystem.h>
+ #include <Lidar/LidarCore.h>
+ #include <Lidar/LidarRegistrarSystemComponent.h>
+@@ -17,6 +20,58 @@
+ 
+ namespace ROS2Sensors
+ {
++    namespace
++    {
++        //! Does this entity belong to a robot description?
++        bool HasRos2Frame(AZ::EntityId entityId)
++        {
++            AZ::Entity* entity = nullptr;
++            AZ::ComponentApplicationBus::BroadcastResult(entity, &AZ::ComponentApplicationRequests::FindEntity, entityId);
++            return entity && entity->FindComponent<ROS2::ROS2FrameComponent>() != nullptr;
++        }
++
++        //! Add every entity of the robot \p entityId belongs to into \p excluded.
++        //! A lidar must not report hits from the machine carrying it. Returns true
++        //! if the list grew, which it does for the first few frames because the
++        //! hierarchy is still being populated while the sensor activates.
++        bool CollectRobotEntities(AZ::EntityId entityId, AZStd::vector<AZ::EntityId>& excluded)
++        {
++            // The robot root is the highest ancestor that is still part of the robot
++            // description. Walking past it would exclude the level itself.
++            AZ::EntityId root = entityId;
++            while (true)
++            {
++                AZ::EntityId parent;
++                AZ::TransformBus::EventResult(parent, root, &AZ::TransformBus::Events::GetParentId);
++                if (!parent.IsValid() || !HasRos2Frame(parent))
++                {
++                    break;
++                }
++                root = parent;
++            }
++
++            bool grew = false;
++            AZStd::vector<AZ::EntityId> pending{ root };
++            while (!pending.empty())
++            {
++                const AZ::EntityId current = pending.back();
++                pending.pop_back();
++
++                if (AZStd::find(excluded.begin(), excluded.end(), current) == excluded.end())
++                {
++                    excluded.push_back(current);
++                    grew = true;
++                }
++
++                AZStd::vector<AZ::EntityId> children;
++                AZ::TransformBus::EventResult(children, current, &AZ::TransformBus::Events::GetChildren);
++                pending.insert(pending.end(), children.begin(), children.end());
++            }
++
++            return grew;
++        }
++    } // namespace
++
+ 
+     void LidarCore::Reflect(AZ::ReflectContext* context)
+     {
+@@ -173,6 +228,7 @@ namespace ROS2Sensors
+         m_lastRotations = LidarTemplateUtils::PopulateRayRotations(m_lidarConfiguration.m_lidarParameters);
+ 
+         m_lidarConfiguration.FetchLidarImplementationFeatures();
++        CollectRobotEntities(m_entityId, m_lidarConfiguration.m_excludedEntities);
+         ConnectToLidarRaycaster();
+         ConfigureLidarRaycaster();
+     }
+@@ -199,6 +255,13 @@ namespace ROS2Sensors
+ 
+     AZStd::optional<RaycastResults> LidarCore::PerformRaycast()
+     {
++        if ((m_lidarConfiguration.m_lidarSystemFeatures & LidarSystemFeatures::EntityExclusion) &&
++            CollectRobotEntities(m_entityId, m_lidarConfiguration.m_excludedEntities))
++        {
++            LidarRaycasterRequestBus::Event(
++                m_lidarRaycasterId, &LidarRaycasterRequestBus::Events::ExcludeEntities, m_lidarConfiguration.m_excludedEntities);
++        }
++
+         AZ::Entity* entity = nullptr;
+         AZ::ComponentApplicationBus::BroadcastResult(entity, &AZ::ComponentApplicationRequests::FindEntity, m_entityId);
+         const auto entityTransform = entity->FindComponent<AzFramework::TransformComponent>();
