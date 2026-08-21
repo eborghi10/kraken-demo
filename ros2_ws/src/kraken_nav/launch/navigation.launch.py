@@ -22,12 +22,15 @@ ROBOT_FRAMES = ('odom', 'base_link')
 
 
 def _namespaced_params(source, namespace, prefix):
-    """Re-root nav2.yaml and prefix its robot frames.
+    """Re-root nav2.yaml, prefix its robot frames and absolutise its topics.
 
     Parameter files are matched by fully qualified node name, so under a
     namespace an unmodified file applies to nothing at all. Frames are rewritten
     by value rather than by key because `global_frame` means the odom frame in
-    the local costmap and the map frame in the global one.
+    the local costmap and the map frame in the global one. Observation topics
+    are made absolute because a costmap is its own node one level below the
+    robot: left relative, `pc` resolves to `<ns>/local_costmap/pc` and the layer
+    silently sees nothing.
     """
     if not namespace and not prefix:
         return source
@@ -41,6 +44,8 @@ def _namespaced_params(source, namespace, prefix):
                 walk(value)
             elif key.endswith('frame') and value in ROBOT_FRAMES:
                 node[key] = prefix + value
+            elif key == 'topic' and isinstance(value, str) and not value.startswith('/'):
+                node[key] = '/'.join(('', namespace, value)) if namespace else '/' + value
 
     walk(params)
     if namespace:
@@ -72,18 +77,24 @@ def _nodes(context):
             trees, 'navigate_through_poses_ackermann.xml'),
     }
 
+    # The parameter file is keyed by fully qualified node name, so the servers
+    # have to be launched into the namespace its keys were written for.
+    remappings = [('odometry/filtered', LaunchConfiguration('odom_topic').perform(context))]
+
     return [
         Node(package='nav2_controller', executable='controller_server', name='controller_server',
-             output='screen', parameters=[params, use_sim_time]),
+             namespace=namespace, output='screen', parameters=[params, use_sim_time],
+             remappings=remappings),
         Node(package='nav2_planner', executable='planner_server', name='planner_server',
-             output='screen', parameters=[params, use_sim_time]),
+             namespace=namespace, output='screen', parameters=[params, use_sim_time]),
         Node(package='nav2_behaviors', executable='behavior_server', name='behavior_server',
-             output='screen', parameters=[params, use_sim_time]),
+             namespace=namespace, output='screen', parameters=[params, use_sim_time]),
         Node(package='nav2_bt_navigator', executable='bt_navigator', name='bt_navigator',
-             output='screen', parameters=[params, use_sim_time, behavior_trees]),
+             namespace=namespace, output='screen',
+             parameters=[params, use_sim_time, behavior_trees], remappings=remappings),
         Node(
             package='nav2_lifecycle_manager', executable='lifecycle_manager',
-            name='lifecycle_manager_navigation', output='screen',
+            name='lifecycle_manager_navigation', namespace=namespace, output='screen',
             parameters=[use_sim_time, {'autostart': True, 'node_names': SERVERS}],
         ),
     ]
@@ -95,5 +106,7 @@ def generate_launch_description():
         DeclareLaunchArgument('namespace', default_value=''),
         DeclareLaunchArgument('frame_prefix', default_value='',
                               description="TF frame prefix, e.g. 'kraken1/'"),
+        DeclareLaunchArgument('odom_topic', default_value='odometry/filtered',
+                              description='Odometry the controller tracks'),
         OpaqueFunction(function=_nodes),
     ])

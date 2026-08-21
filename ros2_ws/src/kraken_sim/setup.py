@@ -22,6 +22,7 @@ setup(
         'console_scripts': [
             'headless_sim = kraken_sim.headless_sim:main',
             'ackermann_bridge = kraken_sim.ackermann_bridge:main',
+            'odom_tf = kraken_sim.odom_tf:main',
         ],
     },
 )
