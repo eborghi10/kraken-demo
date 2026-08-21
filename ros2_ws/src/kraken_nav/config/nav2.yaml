@@ -44,7 +44,11 @@ controller_server:
       movement_time_allowance: 10.0
     general_goal_checker:
       plugin: "nav2_controller::SimpleGoalChecker"
-      xy_goal_tolerance: 0.25
+      # The end of a row is a place, not a point. At 0.25 m a 3.1 m machine
+      # that cannot stop dead drives past its own goal and then has to come
+      # round for it: one run overshot by 4 m and gave up. 0.6 m is inside the
+      # width of the aisle it is standing in.
+      xy_goal_tolerance: 0.6
       # A steered robot reaches a heading only by driving to it, so holding it
       # to one it was never asked for turns arriving into an endless circuit.
       # The scenarios score the position they reach; when a task genuinely
@@ -53,7 +57,10 @@ controller_server:
       stateful: true
     headland_goal_checker:
       plugin: "nav2_controller::SimpleGoalChecker"
-      xy_goal_tolerance: 0.35
+      # Looser than in a row: the turn ends in open headland where being half a
+      # metre out costs nothing, and the row leg that follows is what lines the
+      # machine up with the aisle.
+      xy_goal_tolerance: 0.75
       # A headland turn exists to point the robot down the next row, so unlike
       # an in-row goal this one is not reached until the heading is right.
       yaw_goal_tolerance: 0.20
@@ -157,9 +164,17 @@ controller_server:
     # publishing on controller_selector.
     HeadlandPath:
       plugin: "nav2_mppi_controller::MPPIController"
-      time_steps: 56
+      # A turn has to fit inside the horizon or the controller cannot see that
+      # it is one. The default 56 steps of 0.05 s look 2.8 s, about 1.4 m,
+      # ahead: less than a third of the 4.1 m arc that a 90 degree turn at
+      # 2.61 m radius traces, so every sample looks like driving straight and
+      # the robot leaves the row on a tangent and never comes back. 160 steps
+      # look 8 s ahead, which holds the whole first arc of the manoeuvre.
+      # model_dt stays at the 0.05 s control period so the warm start of the
+      # previous sequence still lines up with real time.
+      time_steps: 160
       model_dt: 0.05
-      batch_size: 2000
+      batch_size: 1500
       vx_std: 0.2
       vy_std: 0.2
       wz_std: 0.4
@@ -174,7 +189,11 @@ controller_server:
       ay_max: 3.0
       az_max: 3.5
       iteration_count: 1
-      prune_distance: 1.2
+      # The plan is pruned to what is still ahead of the robot. At 1.2 m that
+      # is a stub pointing along the current heading, which is exactly the
+      # information a turn does not need; keep enough of it to cover the
+      # horizon.
+      prune_distance: 5.0
       transform_tolerance: 0.1
       temperature: 0.3
       gamma: 0.015
@@ -237,9 +256,10 @@ controller_server:
         offset_from_furthest: 4
         threshold_to_consider: 0.5
         max_angle_to_furthest: 1.0
-        # Reversing is expected here, so judge the heading either way round
-        # rather than treating a backwards segment as a 180 degree error.
-        mode: 1
+        # Smac returns a feasible Reeds-Shepp path whose orientations already
+        # say which way the robot faces on every segment, reverse ones
+        # included, so judge against those rather than assuming forwards.
+        mode: 2
 
 local_costmap:
   local_costmap:
@@ -299,10 +319,13 @@ global_costmap:
       global_frame: map
       robot_base_frame: base_link
       # Rolling because there is no map to be static against. Goals must sit
-      # inside this window or the planner has nowhere to search.
+      # inside this window or the planner has nowhere to search: a goal at the
+      # far end of a 50 m row, given from the row mouth, is outside a 60 m
+      # window and the request is aborted before the robot moves at all. 100 m
+      # spans a row and its headland from either end of it.
       rolling_window: true
-      width: 60
-      height: 60
+      width: 100
+      height: 100
       resolution: 0.1
       footprint: "[ [2.5, 0.45], [2.5, -0.45], [-0.6, -0.45], [-0.6, 0.45] ]"
       track_unknown_space: false
@@ -337,18 +360,25 @@ planner_server:
     GridBased:
       plugin: "nav2_smac_planner::SmacPlannerHybrid"
       tolerance: 0.5
+      # Not downsampled. Coarsening to 0.2 m takes the worst cost in each block
+      # and so grows every trunk by up to a cell: in a 2.4 m aisle that is
+      # enough to close the gap the machine is standing in, and the planner
+      # refuses its own start pose. What made the search affordable instead was
+      # halving the angle bins and caching the heuristic.
       downsample_costmap: false
       downsampling_factor: 1
       allow_unknown: true
       max_iterations: 1000000
       max_on_approach_iterations: 1000
-      max_planning_time: 5.0
+      max_planning_time: 10.0
       # Dubin paths are forward-only, so a near miss can only be corrected by
       # driving a full 2.61 m-radius circle: two runs in eight overshot by
       # 0.65 m and spent 20 s and 33 m coming back round. The robot reverses,
       # so let the planner say so; reverse_penalty keeps it a last resort.
       motion_model_for_search: "REEDS_SHEPP"
-      angle_quantization_bins: 72
+      # 10 degrees per bin. Finer than the 2.61 m turning circle can express
+      # and it only multiplies the states to expand.
+      angle_quantization_bins: 36
       analytic_expansion_ratio: 3.5
       analytic_expansion_max_length: 3.0
       # The robot's own: wheelbase 2.2 m over tan(0.7 rad). Planning anything
@@ -360,7 +390,9 @@ planner_server:
       cost_penalty: 2.0
       retrospective_penalty: 0.015
       lookup_table_size: 20.0
-      cache_obstacle_heuristic: false
+      # The goal holds still for a whole leg while the plan is refreshed every
+      # second, so the 2D heuristic is worth keeping between those calls.
+      cache_obstacle_heuristic: true
       smooth_path: true
       smoother:
         max_iterations: 1000

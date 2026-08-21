@@ -32,6 +32,13 @@ def _nodes(context):
         'base_link_frame': prefix + 'base_link',
     }
 
+    # Neither GNSS position nor a yaw rate says which way a parked machine
+    # faces, so the filter cannot work its heading out until it has moved.
+    # Callers that already know it can say so here.
+    initial_state = [0.0] * 15
+    initial_state[5] = float(LaunchConfiguration('initial_yaw').perform(context))
+    start = {'initial_state': initial_state}
+
     nodes = [
         Node(
             package='robot_localization',
@@ -51,7 +58,7 @@ def _nodes(context):
             executable='ekf_node',
             name='ekf_filter_node',
             output='screen',
-            parameters=[ekf_config, use_sim_time, frames],
+            parameters=[ekf_config, use_sim_time, frames, start],
             remappings=[('odometry/filtered', 'odometry/filtered')],
         ),
     ]
@@ -67,5 +74,7 @@ def generate_launch_description():
         DeclareLaunchArgument('use_sim_time', default_value='true'),
         DeclareLaunchArgument('frame_prefix', default_value='',
                               description="TF frame prefix, e.g. 'kraken1/'"),
+        DeclareLaunchArgument('initial_yaw', default_value='0.0',
+                              description='heading the filter starts at, in radians'),
         OpaqueFunction(function=_nodes),
     ])
