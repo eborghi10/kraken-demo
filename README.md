@@ -170,6 +170,16 @@ itself has to be authored in the O3DE Editor. See
 [Project/README.md](Project/README.md). Contributions very welcome; that is the
 biggest open piece of this repo.
 
+## Navigation
+
+The same machine also has a day job. `kraken_nav` gives it complete coverage of
+an orchard — every aisle driven, headland turns planned on closed-form geometry
+rather than searched for, and no stop between one row and the next — implemented
+as a Nav2 navigator plugin rather than as a script above the stack.
+
+Full write-up, with the conventions, the math, the behaviour tree and the bugs
+that only a real simulator finds: **[docs/navigation.md](docs/navigation.md)**.
+
 ## Repository layout
 
 ```

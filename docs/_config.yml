@@ -1,0 +1,12 @@
+title: Kraken Orchard Navigation
+description: Complete coverage of an orchard with an Ackermann robot, inside Nav2
+theme: jekyll-theme-cayman
+
+exclude:
+  - figures/make_figures.py
+
+defaults:
+  - scope:
+      path: ''
+    values:
+      layout: default
