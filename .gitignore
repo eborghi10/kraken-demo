@@ -12,3 +12,6 @@ Project/user/
 Project/project.json.bak*
 TODO.md
 imgui.ini
+backtrace.log
+docs/_site/
+docs/.jekyll-cache/

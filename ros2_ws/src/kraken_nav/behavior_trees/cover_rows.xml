@@ -38,18 +38,23 @@
                 <Inverter>
                   <TurnDue path="{path}" distance="5.0" has_turn="{has_turn}"/>
                 </Inverter>
-                <!-- If no turn fits, finish the row anyway and let the next
-                     leg's search planner find its own way round. Losing the
-                     headland manoeuvre is worth less than losing the aisle. -->
-                <ForceSuccess>
-                  <Sequence name="plan_the_turn">
-                    <GetPoseFromPath path="{row_path}" pose="{row_end}" index="-1"/>
+                <Sequence name="plan_the_turn">
+                  <GetPoseFromPath path="{row_path}" pose="{row_end}" index="-1"/>
+                  <!-- Geometry first because it answers in under a millisecond
+                       and lands the row centre. Where it will not fit, the
+                       search planner gets the same start and the same goal and
+                       is free to reverse; only if both fail has the machine
+                       genuinely no way out, and then the leg fails and says so
+                       rather than driving to the row end and parking. -->
+                  <Fallback>
                     <ComputePathToPose goal="{turn_goal}" start="{row_end}" use_start="true"
                                        path="{turn_path}" planner_id="Headland"/>
-                    <ConcatenatePaths input_path1="{row_path}" input_path2="{turn_path}"
-                                      output_path="{path}"/>
-                  </Sequence>
-                </ForceSuccess>
+                    <ComputePathToPose goal="{turn_goal}" start="{row_end}" use_start="true"
+                                       path="{turn_path}" planner_id="GridBased"/>
+                  </Fallback>
+                  <ConcatenatePaths input_path1="{row_path}" input_path2="{turn_path}"
+                                    output_path="{path}"/>
+                </Sequence>
               </Fallback>
 
               <FollowPath path="{path}" controller_id="FollowPath"

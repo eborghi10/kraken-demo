@@ -57,11 +57,28 @@ void ArcTracker::configure(
   checker_ = std::make_unique<
     nav2_costmap_2d::FootprintCollisionChecker<nav2_costmap_2d::Costmap2D *>>(
     costmap_ros_->getCostmap());
+
+  // The row and the turn appended to it arrive here as one path and nowhere
+  // else, so this is the only place the mission is visible as the machine
+  // understands it.
+  plan_publisher_ = node->create_publisher<nav_msgs::msg::Path>("mission_plan", 1);
 }
 
-void ArcTracker::cleanup() {checker_.reset();}
-void ArcTracker::activate() {reset();}
-void ArcTracker::deactivate() {reset();}
+void ArcTracker::cleanup()
+{
+  checker_.reset();
+  plan_publisher_.reset();
+}
+void ArcTracker::activate()
+{
+  plan_publisher_->on_activate();
+  reset();
+}
+void ArcTracker::deactivate()
+{
+  plan_publisher_->on_deactivate();
+  reset();
+}
 
 void ArcTracker::reset()
 {
@@ -91,6 +108,7 @@ void ArcTracker::setPlan(const nav_msgs::msg::Path & path)
   }
   digest(path);
   plan_frame_ = path.header.frame_id;
+  plan_publisher_->publish(path);
   index_ = 0;
   running_ = false;
   worst_cross_ = worst_step_ = last_steer_ = 0.0;
