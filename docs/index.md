@@ -3,7 +3,7 @@
 Two questions, one robot.
 
 **Does your robot still know where it is when the sensors lie to you?** That is
-the [localisation robustness suite](https://github.com/rotesfahrrad/kraken-demo):
+the [localisation robustness suite](https://github.com/eborghi10/kraken-demo):
 break the sensors mid-drive, measure the drift, keep the failing configuration
 as the control case.
 
