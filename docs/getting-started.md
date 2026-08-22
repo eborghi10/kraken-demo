@@ -58,6 +58,11 @@ ros2 run kraken_scenarios sweep total_gnss_dropout -n 10
 ros2 run kraken_scenarios sweep total_gnss_dropout -n 8 --fixed-seed   # jitter only
 ```
 
+Against the O3DE scene, add `--simulator o3de --namespace kraken1
+--spawn-point line1`. The spawn point is not optional there in practice: O3DE
+outlives the stack, so without it every run after the first starts wherever the
+previous one stopped.
+
 ---
 
 ## 3. Watching a run

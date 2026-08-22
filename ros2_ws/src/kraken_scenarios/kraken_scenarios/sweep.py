@@ -87,6 +87,31 @@ def one_run(scenario, seed, report, simulator, timeout, namespace=''):
         proc.wait()
 
 
+def reset_o3de(spawn_point, namespace, timeout):
+    """Put the robot back on its spawn point between runs.
+
+    O3DE outlives the stack, so without this run n+1 starts wherever run n left
+    the machine and every run after the first measures from the wrong place.
+    The headless sim needs none of this: it is a fresh process each time.
+
+    Purge first, because spawning onto an occupied point stacks robots.
+    """
+    commands = (['purge'], ['spawn', spawn_point, namespace])
+    for command in commands:
+        try:
+            completed = subprocess.run(
+                ['ros2', 'run', 'kraken_scenarios', 'sim_admin'] + command,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                timeout=timeout)
+        except subprocess.TimeoutExpired:
+            # sim_admin's own warning: a slow reply is not a failed one, and
+            # retrying a spawn is how you end up with two robots on one point.
+            return False
+        if completed.returncode != 0:
+            return False
+    return True
+
+
 def summarise(reports):
     stats = {}
     for metric in METRICS:
@@ -115,10 +140,17 @@ def main(argv=None):
     parser.add_argument('--simulator', choices=('headless', 'o3de'), default='headless')
     parser.add_argument('--namespace', default='',
                         help='robot to run the stack under, e.g. kraken1 for o3de')
+    parser.add_argument('--spawn-point', default='',
+                        help='o3de only: respawn the robot here before each run, e.g. '
+                             'line4. Without it, consecutive runs start wherever the '
+                             'previous one stopped')
     parser.add_argument('--timeout', type=float, default=120.0,
                         help='seconds to wait for one run to produce a report')
     parser.add_argument('-o', '--output', help='write the aggregate JSON here')
     args = parser.parse_args(argv)
+
+    if args.spawn_point and args.simulator != 'o3de':
+        parser.error('--spawn-point only applies to --simulator o3de')
 
     reports = []
     failures = []
@@ -126,6 +158,11 @@ def main(argv=None):
     for i in range(args.runs):
         seed = args.seed_base if args.fixed_seed else args.seed_base + i
         report = os.path.join(workdir, 'run_%02d.json' % i)
+        if args.spawn_point and not reset_o3de(
+                args.spawn_point, args.namespace, args.timeout):
+            failures.append(i)
+            print('run %2d  seed %-4d  RESET FAILED' % (i, seed), flush=True)
+            continue
         result = one_run(args.scenario, seed, report, args.simulator, args.timeout,
                          args.namespace)
         if result is None:
@@ -157,6 +194,7 @@ def main(argv=None):
         'scenario': args.scenario,
         'simulator': args.simulator,
         'namespace': args.namespace,
+        'spawn_point': args.spawn_point,
         'runs_requested': args.runs,
         'runs_completed': len(reports),
         'fixed_seed': args.fixed_seed,
