@@ -1,7 +1,13 @@
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# Nav2 tuning for the flat headless sim: Smac Hybrid-A* global planner, MPPI
-# local controller.
+# Nav2 tuning for the flat headless sim: Smac Hybrid-A* down the rows, headland
+# turns planned as geometry, and one tracker driving both.
+#
+# A row and the turn that follows it are planned separately and concatenated
+# into a single FollowPath goal. That is what stops the machine dead at the end
+# of every row: Nav2 brings a goal to a halt, so as long as the row was a goal
+# of its own the halt was unavoidable no matter how quickly the turn that
+# followed could be worked out.
 #
 # Deliberate omissions:
 #   * No map_server and no static layer. Both costmaps are rolling windows, so
@@ -20,6 +26,28 @@ bt_navigator:
     bt_loop_duration: 10
     default_server_timeout: 20
     wait_for_service_timeout: 1000
+    error_code_names: ["compute_path_error_code", "follow_path_error_code"]
+    # Coverage is exactly the case Nav2's own tutorial gives for writing a
+    # navigator of your own: the job is not a pose to reach, it is a field to
+    # finish. So the mission is a third navigator alongside the two stock ones,
+    # answering a CoverRows action, and not a script on the outside driving the
+    # stack through NavigateToPose.
+    navigators: ["navigate_to_pose", "navigate_through_poses", "cover_rows"]
+    navigate_to_pose:
+      plugin: "nav2_bt_navigator::NavigateToPoseNavigator"
+    navigate_through_poses:
+      plugin: "nav2_bt_navigator::NavigateThroughPosesNavigator"
+    cover_rows:
+      plugin: "kraken_nav::CoverRowsNavigator"
+      wheelbase: 2.2
+      max_steering_angle: 0.7
+    # Everything the coverage tree is built from is stock, and Jazzy loads the
+    # stock node libraries by itself; only what Nav2 has no equivalent for gets
+    # named here. That is three nodes: which aisle is next, which one was
+    # written off, and when the row end is near enough that the turn out of it
+    # can be planned against costmap rather than guesswork.
+    plugin_lib_names:
+      - kraken_cover_rows_bt_nodes
 
 controller_server:
   ros__parameters:
@@ -35,8 +63,8 @@ controller_server:
     min_theta_velocity_threshold: 0.001
     failure_tolerance: 0.3
     progress_checker_plugins: ["progress_checker"]
-    goal_checker_plugins: ["general_goal_checker", "headland_goal_checker"]
-    controller_plugins: ["FollowPath", "HeadlandPath"]
+    goal_checker_plugins: ["general_goal_checker"]
+    controller_plugins: ["FollowPath"]
 
     progress_checker:
       plugin: "nav2_controller::SimpleProgressChecker"
@@ -55,211 +83,54 @@ controller_server:
       # needs a heading it should say so in the goal.
       yaw_goal_tolerance: 3.15
       stateful: true
-    headland_goal_checker:
-      plugin: "nav2_controller::SimpleGoalChecker"
-      # Looser than in a row: the turn ends in open headland where being half a
-      # metre out costs nothing, and the row leg that follows is what lines the
-      # machine up with the aisle.
-      xy_goal_tolerance: 0.75
-      # A headland turn exists to point the robot down the next row, so unlike
-      # an in-row goal this one is not reached until the heading is right.
-      yaw_goal_tolerance: 0.20
-      stateful: true
 
     FollowPath:
-      plugin: "nav2_mppi_controller::MPPIController"
-      time_steps: 56
-      model_dt: 0.05
-      batch_size: 2000
-      vx_std: 0.2
-      vy_std: 0.2
-      wz_std: 0.4
-      # Matches the 0.8 m/s the fault scenarios drive at, so navigation and
-      # open-loop runs stress the filter in the same velocity regime.
-      vx_max: 0.8
-      vx_min: -0.35
-      vy_max: 0.5
-      wz_max: 1.0
-      ax_max: 3.0
-      ax_min: -3.0
-      ay_max: 3.0
-      az_max: 3.5
-      iteration_count: 1
-      prune_distance: 1.7
-      transform_tolerance: 0.1
-      temperature: 0.3
-      gamma: 0.015
-      # The Kraken steers; it cannot pivot. Told it was a differential drive,
-      # MPPI opens every plan with a rotation in place, which a steered robot
-      # answers by standing still, and then it never gets going at all. The
-      # radius is the robot's own: wheelbase 2.2 m over tan(0.7 rad), the
-      # steering limit the drive model falls back on.
-      motion_model: "Ackermann"
-      AckermannConstraints:
-        min_turning_r: 2.61
-      visualize: false
-      regenerate_noises: true
-      critics: [
-        "ConstraintCritic", "CostCritic", "GoalCritic", "GoalAngleCritic",
-        "PathAlignCritic", "PathFollowCritic", "PathAngleCritic",
-        "PreferForwardCritic"]
-      ConstraintCritic:
-        enabled: true
-        cost_power: 1
-        cost_weight: 4.0
-      CostCritic:
-        enabled: true
-        cost_power: 1
-        cost_weight: 3.81
-        critical_cost: 300.0
-        # The machine is 3.1 m long and pivots about its rear axle, so a
-        # circular approximation is either useless or paralysing.
-        consider_footprint: true
-        collision_cost: 1000000.0
-        near_goal_distance: 1.0
-      GoalCritic:
-        enabled: true
-        cost_power: 1
-        cost_weight: 5.0
-        threshold_to_consider: 1.4
-      GoalAngleCritic:
-        enabled: true
-        cost_power: 1
-        cost_weight: 3.0
-        threshold_to_consider: 0.5
-      PreferForwardCritic:
-        enabled: true
-        cost_power: 1
-        cost_weight: 5.0
-        threshold_to_consider: 0.5
-      PathAlignCritic:
-        enabled: true
-        cost_power: 1
-        cost_weight: 14.0
-        max_path_occupancy_ratio: 0.05
-        trajectory_point_step: 4
-        threshold_to_consider: 0.5
-        offset_from_furthest: 20
-        use_path_orientations: false
-      PathFollowCritic:
-        enabled: true
-        cost_power: 1
-        cost_weight: 5.0
-        offset_from_furthest: 5
-        threshold_to_consider: 1.4
-      PathAngleCritic:
-        enabled: true
-        cost_power: 1
-        cost_weight: 2.0
-        offset_from_furthest: 4
-        threshold_to_consider: 0.5
-        max_angle_to_furthest: 1.0
-        mode: 0
-
-    # The same controller, told it is doing a different job. Turning out of one
-    # row and into another is not driving down a corridor: the robot needs the
-    # whole headland, has to reverse to make a 2.61 m radius fit, and is not
-    # finished until it points down the next row. Kept as a second instance
-    # rather than as reconfiguration so a leg can be switched mid-mission by
-    # publishing on controller_selector.
-    HeadlandPath:
-      plugin: "nav2_mppi_controller::MPPIController"
-      # A turn has to fit inside the horizon or the controller cannot see that
-      # it is one. The default 56 steps of 0.05 s look 2.8 s, about 1.4 m,
-      # ahead: less than a third of the 4.1 m arc that a 90 degree turn at
-      # 2.61 m radius traces, so every sample looks like driving straight and
-      # the robot leaves the row on a tangent and never comes back. 160 steps
-      # look 8 s ahead, which holds the whole first arc of the manoeuvre.
-      # model_dt stays at the 0.05 s control period so the warm start of the
-      # previous sequence still lines up with real time.
-      time_steps: 160
-      model_dt: 0.05
-      batch_size: 1500
-      vx_std: 0.2
-      vy_std: 0.2
-      wz_std: 0.4
-      # Slower than in-row: the manoeuvre is short, tight and the only place
-      # the machine changes direction.
-      vx_max: 0.5
-      vx_min: -0.5
-      vy_max: 0.5
-      wz_max: 1.0
-      ax_max: 3.0
-      ax_min: -3.0
-      ay_max: 3.0
-      az_max: 3.5
-      iteration_count: 1
-      # The plan is pruned to what is still ahead of the robot. At 1.2 m that
-      # is a stub pointing along the current heading, which is exactly the
-      # information a turn does not need; keep enough of it to cover the
-      # horizon.
-      prune_distance: 5.0
-      transform_tolerance: 0.1
-      temperature: 0.3
-      gamma: 0.015
-      motion_model: "Ackermann"
-      AckermannConstraints:
-        min_turning_r: 2.61
-      visualize: false
-      regenerate_noises: true
-      # PreferForwardCritic is gone. Rows are 3.5 m apart and the robot turns
-      # on 2.61 m, so a headland manoeuvre that may not reverse cannot be done
-      # at all; penalising reverse here only makes the robot fight its own plan.
-      critics: [
-        "ConstraintCritic", "CostCritic", "GoalCritic", "GoalAngleCritic",
-        "PathAlignCritic", "PathFollowCritic", "PathAngleCritic"]
-      ConstraintCritic:
-        enabled: true
-        cost_power: 1
-        cost_weight: 4.0
-      CostCritic:
-        enabled: true
-        cost_power: 1
-        cost_weight: 3.81
-        critical_cost: 300.0
-        consider_footprint: true
-        collision_cost: 1000000.0
-        near_goal_distance: 1.0
-      GoalCritic:
-        enabled: true
-        cost_power: 1
-        cost_weight: 5.0
-        threshold_to_consider: 1.4
-      GoalAngleCritic:
-        enabled: true
-        cost_power: 1
-        # The heading is the point of the manoeuvre, so it outweighs the
-        # in-row setting and starts mattering long before the goal.
-        cost_weight: 8.0
-        threshold_to_consider: 1.5
-      PathAlignCritic:
-        enabled: true
-        cost_power: 1
-        cost_weight: 14.0
-        max_path_occupancy_ratio: 0.05
-        trajectory_point_step: 4
-        threshold_to_consider: 0.5
-        offset_from_furthest: 20
-        # The plan's own orientations carry the direction changes; ignoring
-        # them would align the robot to a path it is meant to back along.
-        use_path_orientations: true
-      PathFollowCritic:
-        enabled: true
-        cost_power: 1
-        cost_weight: 5.0
-        offset_from_furthest: 5
-        threshold_to_consider: 1.4
-      PathAngleCritic:
-        enabled: true
-        cost_power: 1
-        cost_weight: 2.0
-        offset_from_furthest: 4
-        threshold_to_consider: 0.5
-        max_angle_to_furthest: 1.0
-        # Smac returns a feasible Reeds-Shepp path whose orientations already
-        # say which way the robot faces on every segment, reverse ones
-        # included, so judge against those rather than assuming forwards.
-        mode: 2
+      plugin: "kraken_nav::ArcTracker"
+      # The machine, as the geometry needs it.
+      wheelbase: 2.2
+      max_steering_angle: 0.7
+      # Full speed down a row, slower through a turn. The row figure matches
+      # the 0.8 m/s the fault scenarios drive at, so navigation and open-loop
+      # runs stress the filter in the same velocity regime.
+      desired_linear_vel: 0.8
+      turn_linear_vel: 0.4
+      max_accel: 0.4
+      max_decel: 0.4
+      # Below this the path is straight enough to take at full speed. The
+      # tightest arc the machine can drive is 0.38, so nothing that bends is
+      # going to be mistaken for a straight.
+      straight_curvature: 0.02
+      # Curvature is read back off the path over this much of it. Differencing
+      # neighbouring poses instead would turn the search planner's sampling
+      # noise into steering.
+      # Over how much of the plan the curvature to hold is read back out of it.
+      # Counted in samples, because how much averaging a plan needs is
+      # something it declares by how finely it sampled itself: the search
+      # planner returns rows 0.4 m apart with a few degrees of noise on each
+      # pose, so four of its samples average over 1.6 m, while the geometry
+      # planner traces exact arcs every 5 cm and four of those span 0.2 m and
+      # blur nothing. The window in metres is only a floor, against poses that
+      # arrive on top of one another.
+      # (Written as a decimal because the plugin declares its parameters as
+      # doubles; an integer here is a different type and the controller server
+      # refuses to configure.)
+      curvature_samples: 4.0
+      curvature_window: 0.15
+      # How long a stretch of reversing has to be before it is believed to be a
+      # reversal rather than one pose pointing the wrong way. No arc of a real
+      # headland manoeuvre is shorter than this.
+      min_segment: 1.0
+      heading_gain: 0.8
+      cross_gain: 0.6
+      # How much of the steering left unused at the planned radius may be spent
+      # correcting. The path is meant to be driven, not searched for.
+      correction_share: 0.3
+      # Further off the path than this and something is wrong that steering
+      # harder will not fix, so stop and say so rather than lunge back across
+      # an aisle with trees down both sides.
+      max_cross_track: 0.75
+      collision_lookahead: 2.0
+      transform_tolerance: 0.2
 
 local_costmap:
   local_costmap:
@@ -355,7 +226,7 @@ planner_server:
   ros__parameters:
     use_sim_time: true
     expected_planner_frequency: 1.0
-    planner_plugins: ["GridBased"]
+    planner_plugins: ["GridBased", "Headland"]
     costmap_update_timeout: 1.0
     GridBased:
       plugin: "nav2_smac_planner::SmacPlannerHybrid"
@@ -401,6 +272,34 @@ planner_server:
         tolerance: 1.0e-10
         do_refinement: true
         refinement_num: 2
+
+    # A headland turn has nothing left to search for. The machine has one
+    # turning radius, the rows have one spacing and the headland has one depth,
+    # and between them they decide the manoeuvre; the only question is which of
+    # the three it is. Asked for a path from a row end to the mouth of the next
+    # row, this returns that manoeuvre and no search happens at all.
+    Headland:
+      plugin: "kraken_nav::HeadlandPlanner"
+      wheelbase: 2.2
+      max_steering_angle: 0.7
+      # The footprint the costmaps are given, rear axle at the origin. The
+      # depth a turn needs is measured to the swept body rather than to the
+      # axle: the nose is 2.5 m ahead of it before the turn even starts.
+      front_overhang: 2.5
+      rear_overhang: 0.6
+      half_width: 0.45
+      # Straight out of the row before anything swings, so the back of the
+      # machine is past the last trunks before the wheels go over.
+      entry: 0.8
+      # Headland held back from the manoeuvre rather than offered to it. The
+      # turn is chosen from where the row is predicted to end and the machine
+      # arrives with a little error in hand, so a turn that fits to the last
+      # centimetre does not fit at all.
+      clearance: 1.0
+      # Zero measures the headland off the costmap at the row end, which is the
+      # only honest source: the two headlands in this orchard differ by 11 m.
+      headland_depth: 0.0
+      step: 0.05
 
 behavior_server:
   ros__parameters:

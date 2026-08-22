@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: BSD-3-Clause
+#
+# RViz, and nothing else.
+#
+# Kept out of Dockerfile.Stack on purpose: that image is the one the tests run
+# in and its whole point is that it has no graphics dependency and runs
+# anywhere. RViz drags in Qt and OGRE and wants a GL context, so it lives here.
+#
+# There is no build of ros2_ws in this image and it does not need one. The only
+# thing it reads from the workspace is the .rviz file, which compose mounts
+# from the source tree, so editing a display and restarting is immediate.
+#
+# Run `xhost +local:` on the host first, or the container cannot reach the X
+# server.
+
+ARG ROS_VERSION=jazzy
+ARG UBUNTU_VERSION=noble
+
+FROM ros:${ROS_VERSION}-ros-base-${UBUNTU_VERSION}
+
+ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+
+# Must match Dockerfile.Stack and Dockerfile.Simulation: discovery works across
+# the three containers only if all three are configured the same way.
+ENV CYCLONEDDS_URI=/etc/cyclonedds.xml
+COPY docker/cyclonedds.xml /etc/cyclonedds.xml
+
+RUN apt-get update \
+    && DEBIAN_FRONTEND="noninteractive" apt-get -y install --no-install-recommends \
+        ros-${ROS_DISTRO}-rviz2 \
+        ros-${ROS_DISTRO}-rmw-cyclonedds-cpp \
+        ros-${ROS_DISTRO}-nav2-rviz-plugins \
+    && rm -rf /var/lib/apt/lists/*
+
+# The costmaps are stamped with simulation time, so a viewer on wall-clock time
+# discards every message as too old and draws nothing.
+CMD ["bash", "-lc", "rviz2 -d /data/workspace/ros2_ws/src/kraken_nav/rviz/orchard.rviz --ros-args -p use_sim_time:=true"]

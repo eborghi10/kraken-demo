@@ -1,0 +1,199 @@
+# SPDX-License-Identifier: BSD-3-Clause
+#
+# What the machine is navigating on, in the frame it navigates in.
+#
+# The topics are namespaced /kraken1 because that is what the launch file
+# spawns; a second robot means a second copy of this file with the namespace
+# swapped, which RViz cannot do for you.
+#
+# The QoS on each display is not decoration. The costmaps are published
+# transient-local and reliable and the lidar best-effort, and a display asking
+# for the wrong one connects to nothing and shows an empty screen with no error
+# worth reading.
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+    Property Tree Widget:
+      Splitter Ratio: 0.55
+    Width: 340
+  - Class: rviz_common/Views
+    Name: Views
+
+Visualization Manager:
+  Class: ""
+  Name: root
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: map
+    Frame Rate: 30
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Enabled: true
+      Name: Grid
+      Cell Size: 5
+      Plane Cell Count: 40
+      Color: 90; 90; 90
+      Alpha: 0.3
+
+    # The trunks the map never knew about: what the planner is actually routing
+    # around, as opposed to the orchard as designed.
+    - Class: rviz_default_plugins/Map
+      Enabled: true
+      Name: Global costmap
+      Alpha: 0.55
+      Color Scheme: costmap
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        Reliability Policy: Reliable
+        Value: /kraken1/global_costmap/costmap
+
+    - Class: rviz_default_plugins/Map
+      Enabled: false
+      Name: Local costmap
+      Alpha: 0.7
+      Color Scheme: costmap
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        Reliability Policy: Reliable
+        Value: /kraken1/local_costmap/costmap
+
+    - Class: rviz_default_plugins/PointCloud2
+      Enabled: true
+      Name: Lidar
+      Style: Flat Squares
+      Size (m): 0.06
+      Decay Time: 0
+      Color Transformer: AxisColor
+      Axis: Z
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Reliability Policy: Best Effort
+        Value: /kraken1/pc
+
+    - Class: rviz_default_plugins/Path
+      Enabled: true
+      Name: Row plan (Nav2)
+      Color: 25; 255; 240
+      Line Style: Lines
+      Topic:
+        Depth: 1
+        Durability Policy: Volatile
+        Reliability Policy: Reliable
+        Value: /kraken1/plan
+
+    # The whole leg the machine was given: the row planned by search and the
+    # headland manoeuvre planned by geometry, joined into one path. Latched, so
+    # it stays on screen for the whole leg rather than flashing past.
+    - Class: rviz_default_plugins/Path
+      Enabled: true
+      Name: Mission path (row + turn)
+      Color: 255; 170; 0
+      Line Style: Billboards
+      Line Width: 0.08
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        Reliability Policy: Reliable
+        Value: /kraken1/mission_plan
+
+    # 3.1 m long and 0.9 m wide with the origin at the rear axle: the reason a
+    # turn that looks like it fits on paper does not always fit here.
+    - Class: rviz_default_plugins/Polygon
+      Enabled: true
+      Name: Footprint
+      Color: 0; 255; 0
+      Topic:
+        Depth: 1
+        Durability Policy: Volatile
+        Reliability Policy: Reliable
+        Value: /kraken1/local_costmap/published_footprint
+
+    # Filter against truth. In this simulator GNSS is noiseless, so a gap here
+    # is the filter's own doing and not the fix's.
+    - Class: rviz_default_plugins/Odometry
+      Enabled: true
+      Name: EKF
+      Keep: 300
+      Position Tolerance: 0.3
+      Angle Tolerance: 0.2
+      Covariance:
+        Value: false
+      Shape:
+        Color: 255; 85; 255
+        Shaft Length: 0.6
+        Shaft Radius: 0.06
+        Head Length: 0.2
+        Head Radius: 0.12
+      Topic:
+        Depth: 10
+        Durability Policy: Volatile
+        Reliability Policy: Reliable
+        Value: /kraken1/odometry/filtered
+
+    - Class: rviz_default_plugins/Odometry
+      Enabled: false
+      Name: Ground truth
+      Keep: 300
+      Position Tolerance: 0.3
+      Angle Tolerance: 0.2
+      Covariance:
+        Value: false
+      Shape:
+        Color: 255; 255; 255
+        Shaft Length: 0.6
+        Shaft Radius: 0.06
+        Head Length: 0.2
+        Head Radius: 0.12
+      Topic:
+        Depth: 10
+        Durability Policy: Volatile
+        Reliability Policy: Best Effort
+        Value: /kraken1/ground_truth/odom
+
+    - Class: rviz_default_plugins/TF
+      Enabled: true
+      Name: TF
+      Marker Scale: 2
+      Show Arrows: false
+      Show Axes: true
+      Show Names: true
+
+  Tools:
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/FocusCamera
+    - Class: rviz_default_plugins/Measure
+      Line color: 128; 128; 0
+    - Class: rviz_default_plugins/SetGoal
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Reliability Policy: Reliable
+        Value: /kraken1/goal_pose
+
+  Views:
+    Current:
+      # A row is 46 m long and the rows are 3.5 m apart, which is only legible
+      # from above.
+      Class: rviz_default_plugins/TopDownOrtho
+      Name: Above
+      Angle: 0
+      Scale: 12
+      Target Frame: <Fixed Frame>
+      X: -50
+      Y: 25
+    Saved:
+      - Class: rviz_default_plugins/Orbit
+        Name: Follow
+        Distance: 25
+        Pitch: 0.7
+        Yaw: 3.14
+        Target Frame: kraken1/base_link
+
+Window Geometry:
+  Height: 900
+  Width: 1600
+  Displays:
+    collapsed: false

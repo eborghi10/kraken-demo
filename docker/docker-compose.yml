@@ -36,6 +36,30 @@ services:
                 colcon test --packages-select kraken_scenarios --event-handlers console_direct+ &&
                 colcon test-result --all --verbose"
 
+  # RViz against a running stack. Read-only: it subscribes and draws, it does
+  # not launch anything, so it can be started and killed mid-run without
+  # disturbing the mission.
+  #
+  #   xhost +local:
+  #   docker compose -f docker/docker-compose.yml run --rm viz
+  viz:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.Viz
+    image: kraken_viz
+    network_mode: host
+    ipc: host
+    environment:
+      - DISPLAY=${DISPLAY}
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    volumes:
+      - ${KRAKEN_ROOT:-..}/ros2_ws/src:/data/workspace/ros2_ws/src:ro
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    working_dir: /data/workspace
+    stdin_open: true
+    tty: true
+
   # Heavy image: O3DE editor / game launcher. Needs a GPU.
   #
   # The engine is NOT in the image. /o3de is a bind mount so the clone and the

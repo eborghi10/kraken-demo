@@ -1,0 +1,34 @@
+# Visit every aisle of an orchard once, turning at the headlands in between.
+#
+# The field is described in the terms an orchard is actually laid out in --
+# a count of aisles and their spacing -- not as a list of poses. Where those
+# aisles are in the map is settled by the navigator, which anchors a row-aligned
+# frame to wherever the machine is standing when the goal arrives.
+
+# How many aisles lie ahead of the machine, counting the one it is standing in.
+uint16 aisles
+# Spacing between aisle centrelines, metres.
+float32 aisle_pitch
+# Aisles to leave between successive passes. Zero asks for the skip that makes
+# every turn but one a plain u-turn, worked out from the turning radius.
+uint16 aisle_skip
+# Where a row leg starts and finishes along the row, metres from the anchor.
+float32 row_near_x
+float32 row_far_x
+# Which way the rows run in the map frame. Non-finite falls back on whatever
+# localisation reports, which is only meaningful once the machine is moving.
+float32 row_heading_deg
+---
+# Aisles covered and the ones that had to be given up on.
+uint16 covered
+uint16[] missed
+builtin_interfaces/Duration total_time
+# Nav2 collects the worst error code the tree raised into every action result.
+uint16 error_code
+string error_msg
+---
+uint16 current_aisle
+uint16 legs_done
+uint16 legs_total
+float32 distance_remaining
+builtin_interfaces/Duration navigation_time

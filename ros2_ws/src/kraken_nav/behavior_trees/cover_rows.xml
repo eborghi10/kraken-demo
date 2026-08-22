@@ -1,0 +1,75 @@
+<!--
+  Covering an orchard, a leg at a time.
+
+  Everything here is a stock Nav2 node but three: NextLeg hands out the next
+  aisle, MissedLeg writes one off, and NearPathEnd says when the row end is
+  close enough to plan the turn out of it honestly.
+
+  The shape worth noticing is the inner ReactiveSequence. FollowPath is driving
+  the row while, above it, the turn is being planned and joined onto the path
+  it is already following. Changing {path} makes FollowPath update its goal
+  rather than send a new one, so the machine drives out of the row and around
+  the headland without ever coming to a stop.
+-->
+<root BTCPP_format="4" main_tree_to_execute="CoverRows">
+  <BehaviorTree ID="CoverRows">
+    <!-- Running out of aisles is how the day ends, not a fault. NextLeg failing
+         is the loop's exit, so the tree must not report the mission failed. -->
+    <ForceSuccess>
+      <KeepRunningUntilFailure>
+      <Sequence name="leg">
+        <NextLeg row_goal="{row_goal}" turn_goal="{turn_goal}" has_turn="{has_turn}"
+                 aisle="{aisle}"/>
+
+        <Fallback name="drive_or_write_off">
+          <Sequence name="drive_the_leg">
+            <ComputePathToPose goal="{row_goal}" path="{row_path}" planner_id="GridBased"
+                               error_code_id="{compute_path_error_code}"/>
+            <!-- Seed the path being followed with the row. TruncatePath by zero
+                 is the stock way to copy one path entry into another. -->
+            <TruncatePath input_path="{row_path}" output_path="{path}" distance="0.0"/>
+
+            <PipelineSequence name="row_then_turn">
+              <!-- Reticked while FollowPath runs. TurnDue stays false until the
+                   row end is in reach, then fires once: the turn is planned
+                   against costmap the machine has just swept for itself and
+                   joined onto the path it is already following. -->
+              <Fallback>
+                <Inverter>
+                  <TurnDue path="{path}" distance="5.0" has_turn="{has_turn}"/>
+                </Inverter>
+                <!-- If no turn fits, finish the row anyway and let the next
+                     leg's search planner find its own way round. Losing the
+                     headland manoeuvre is worth less than losing the aisle. -->
+                <ForceSuccess>
+                  <Sequence name="plan_the_turn">
+                    <GetPoseFromPath path="{row_path}" pose="{row_end}" index="-1"/>
+                    <ComputePathToPose goal="{turn_goal}" start="{row_end}" use_start="true"
+                                       path="{turn_path}" planner_id="Headland"/>
+                    <ConcatenatePaths input_path1="{row_path}" input_path2="{turn_path}"
+                                      output_path="{path}"/>
+                  </Sequence>
+                </ForceSuccess>
+              </Fallback>
+
+              <FollowPath path="{path}" controller_id="FollowPath"
+                          goal_checker_id="general_goal_checker"
+                          error_code_id="{follow_path_error_code}"/>
+            </PipelineSequence>
+          </Sequence>
+
+          <!-- A wedged machine costs one aisle, not the rest of the field. -->
+          <Sequence name="write_off_and_recover">
+            <MissedLeg/>
+            <ClearEntireCostmap name="ClearLocal" service_name="local_costmap/clear_entirely_local_costmap"/>
+            <ClearEntireCostmap name="ClearGlobal" service_name="global_costmap/clear_entirely_global_costmap"/>
+            <ForceSuccess>
+              <BackUp backup_dist="2.5" backup_speed="0.3" time_allowance="20"/>
+            </ForceSuccess>
+          </Sequence>
+        </Fallback>
+      </Sequence>
+      </KeepRunningUntilFailure>
+    </ForceSuccess>
+  </BehaviorTree>
+</root>

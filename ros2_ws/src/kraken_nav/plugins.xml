@@ -1,0 +1,26 @@
+<library path="kraken_nav_plugins">
+  <class type="kraken_nav::HeadlandPlanner" base_class_type="nav2_core::GlobalPlanner">
+    <description>
+      Headland turns chosen as geometry rather than searched for: a u-turn where
+      the next row is at least a turning diameter away, a bulb where it is
+      nearer and the headland is deep enough to loop round the outside, and a
+      three-point turn where it is not. The depth available is read off the
+      costmap at the row end rather than assumed.
+    </description>
+  </class>
+  <class type="kraken_nav::ArcTracker" base_class_type="nav2_core::Controller">
+    <description>
+      Follows a path at the curvature the path already implies, commanding the
+      steering angle outright and using feedback only to trim it. Brakes to a
+      stop at a change of direction, which an Ackermann machine cannot make
+      while rolling.
+    </description>
+  </class>
+  <class type="kraken_nav::CoverRowsNavigator" base_class_type="nav2_core::NavigatorBase">
+    <description>
+      Covers an orchard aisle by aisle. Holds the mission state -- where the
+      rows are, what order to take them in, what has been covered -- and leaves
+      the driving of a single leg to a behaviour tree of stock Nav2 nodes.
+    </description>
+  </class>
+</library>
