@@ -1,7 +1,11 @@
 # Navigation
 
-How an Ackermann orchard robot covers a field: what it assumes, what it
-computes, what it refuses to do, and what broke on the way.
+*[Docs index](index.md) · [Control](control.md) · [Mission planning](mission-planning.md)*
+
+How an Ackermann orchard robot lays out a field and plans its way round it: what
+it assumes, what it computes, what it refuses to do, and what broke on the way.
+Following the resulting path is [control](control.md); deciding which row is next
+is [mission planning](mission-planning.md).
 
 Everything below is implemented in `ros2_ws/src/kraken_nav`. Nothing here is
 aspirational — where a number appears it was either measured off the level, read
@@ -29,14 +33,7 @@ for one row. It is not fine for a field, because:
   about the next one loses a large fraction of the day to standing still.
 
 So the mission is a first-class part of the navigation stack rather than a
-script sitting above it. Nav2's own documentation names this case explicitly:
-
-> It may be beneficial to write your own Navigator if you have a custom action
-> message definition you'd like to use with Navigation rather than the provided
-> `NavigateToPose` or `NavigateThroughPoses` interfaces (**e.g. doing complete
-> coverage**).
->
-> — *Nav2, Writing a New Navigator Plugin*
+script sitting above it — see [mission planning](mission-planning.md).
 
 ---
 
@@ -134,10 +131,9 @@ $$
 R_{\min} \;=\; \frac{2.2}{\tan 0.7} \;=\; 2.611932\ \text{m}.
 $$
 
-The controller emits `Twist`; a bridge converts it to `AckermannDrive` by
-inverting the same relation,
-$\delta = \arctan(L\,\omega_z / v)$, clamped to $\pm 0.7$ and zeroed below
-0.05 m/s.
+The controller emits `Twist` and clamps its curvature to $1/R_{\min}$; see
+[control §5](control.md#5-from-curvature-to-steering) for what converts that
+into steering on each simulator.
 
 **The number that shapes everything:** the tightest circle the machine can
 drive has diameter $2R_{\min} = 5.22\ \text{m}$, and the aisles are 3.5 m
@@ -446,246 +442,15 @@ Refusing correctly is necessary but not sufficient. Having refused, the machine
 still has to get out of a row whose headland is obstructed on the side it wants
 to go. As of the last run it does not reliably manage that: the leg is written
 off and the following legs inherit an awkward pose, and coverage stops at 7 of
-18. **This is the live piece of work.** The fix in §8 removes one cause (a
-silently swallowed failure); whether the search-planner fallback is enough to
-recover from a genuinely blocked headland is not yet demonstrated.
+18. **This is the live piece of work.** The fix in
+[mission planning §5](mission-planning.md#5-the-two-forcesuccess-decorators)
+removes one cause (a silently swallowed failure); whether the search-planner
+fallback is enough to recover from a genuinely blocked headland is not yet
+demonstrated.
 
 ---
 
-## 7. Following the path
-
-`kraken_nav::ArcTracker` is a `nav2_core::Controller`. It does not do pure
-pursuit. It tracks the *curvature the planner asked for* and trims it.
-
-### Digesting the plan
-
-A `nav_msgs/Path` is a list of poses, which is a lossy way to describe arcs.
-Smac emits poses about 0.4 m apart with per-pose orientation noise, and naive
-differencing of that reads a dead-straight 44 m row as *"two direction changes,
-tightest radius 1.47 m"*. Two filters fix it:
-
-- **Run-length filter.** A forward/reverse run shorter than `min_segment`
-  (1.0 m) is absorbed into its neighbour. Direction changes are real events;
-  they do not happen twice in 40 cm.
-- **Sample-counted curvature window.** Curvature is measured over a window that
-  terminates when it has *both* enough samples (`curvature_samples`, 4) *and*
-  enough distance (`curvature_window`, 0.15 m). Counting only distance smeared
-  the bulb turn's two opposite-sign arcs together and cost 0.75 m of tracking
-  error.
-
-Curvature below `straight_curvature` (0.02 m⁻¹) is snapped to zero.
-
-### The control law
-
-With cross-track error $e$ (positive left of the path) and heading error
-$\psi$, curvature limit $\Lambda = 1/R_{\min}$, and correction share
-$\alpha = 0.3$:
-
-$$
-\tilde\psi = \begin{cases} \psi & \text{forward} \\ -\psi & \text{reverse} \end{cases}
-$$
-
-$$
-\text{trim} = \operatorname{clamp}\Big(-\big(k_\psi\,\tilde\psi + k_e\,e\big),\ -\alpha\Lambda,\ +\alpha\Lambda\Big),
-\qquad k_\psi = 0.8,\ k_e = 0.6
-$$
-
-$$
-\kappa_{\text{cmd}} = \operatorname{clamp}\big(\kappa_{\text{ref}} + \text{trim},\ -\Lambda,\ +\Lambda\big)
-$$
-
-Two things deserve comment.
-
-**The reverse sign flip is on the heading term, not the cross-track term.** When
-reversing, steering right still moves the front of the machine right, but the
-*path* progresses backwards, so the heading error's sense inverts while the
-cross-track error's does not. Flipping the wrong one produced a divergent
-0.77 m error that looked exactly like a gain problem and was not.
-
-**The trim is clamped to a share of the limit, not to the limit.** The reference
-curvature is allowed most of the steering; corrections get 30%. Combined with
-the roomy-radius rule of §5, the machine always has authority left to correct
-with.
-
-### Speed
-
-$$
-v = \begin{cases}
-v_{\text{turn}} = 0.4\ \text{m/s} & |\kappa_{\text{ref}}| > \kappa_{\text{straight}} \\
-v_{\text{row}} = 0.8\ \text{m/s} & \text{otherwise}
-\end{cases}
-$$
-
-then limited so the machine can always stop in the distance remaining — both to
-the end of the path and to the next cusp (direction reversal):
-
-$$
-v \;\le\; \sqrt{2\,a_{\max}\,d_{\text{end}}},
-\qquad
-v \;\le\; \sqrt{2\,a_{\max}\,d_{\text{cusp}}},
-\qquad a_{\max} = 0.4\ \text{m/s}^2
-$$
-
-finally signed by the current segment's direction and rate-limited by
-$a_{\max}$.
-
-### Refusing to drive
-
-Before each command the tracker samples the path ahead over
-`collision_lookahead` (2.0 m), one pose per costmap cell, and vetoes on cost
-**exactly 254**. Not 253. Cost 253 is `INSCRIBED_INFLATED_OBSTACLE` — inflation,
-not an obstacle. Vetoing on 253 in an orchard, where the aisle is barely wider
-than the inflation radius on both sides, aborts every single leg. This was the
-first bug and it looked like a planner failure for a long time.
-
----
-
-## 8. The mission, inside Nav2
-
-### The action
-
-`kraken_interfaces/action/CoverRows`:
-
-```
-uint16 aisles          float32 aisle_pitch    uint16 aisle_skip
-float32 row_near_x     float32 row_far_x      float32 row_heading_deg
----
-uint16 covered         uint16[] missed        builtin_interfaces/Duration total_time
-uint16 error_code      string error_msg
----
-uint16 current_aisle   uint16 legs_done       uint16 legs_total
-float32 distance_remaining                    builtin_interfaces/Duration navigation_time
-```
-
-> **Trap.** `nav2_behavior_tree::BtActionServer<ActionT>::populateErrorCode`
-> dereferences `result->error_code`. Any custom navigator action **must** carry
-> a `uint16 error_code` field or the template will not compile, with an error
-> that points nowhere useful.
-
-### The navigator plugin
-
-`kraken_nav::CoverRowsNavigator` derives from
-`nav2_core::BehaviorTreeNavigator<CoverRows>`. It owns the mission state and
-nothing else:
-
-- `goalReceived` — validates, anchors the row frame at the current pose, builds
-  the leg list, and pushes it onto the blackboard.
-- `onLoop` — publishes feedback.
-- `onPreempt` — **refuses.** A coverage run has no meaningful "same goal,
-  slightly different" preemption; changing the field mid-run silently would be
-  worse than making the operator cancel.
-- `goalCompleted` — fills in `covered` and `missed`.
-
-`on_configure` and friends are `final` in the base class and must not be
-overridden.
-
-> **Trap.** The framework guarantees only `node`, `server_timeout`,
-> `bt_loop_duration` and `cancel_timeout` on the blackboard. `tf_buffer`,
-> `global_frame` and `robot_base_frame` are *not* set — the navigator sets them
-> in `goalReceived` so the custom BT nodes can read TF.
-
-### The tree
-
-Three custom BT nodes, because only three had no stock equivalent:
-
-| Node | Kind | Does |
-| --- | --- | --- |
-| `NextLeg` | action | Hands out the next aisle; **fails when the field is finished**, which is how the loop exits. |
-| `MissedLeg` | action | Records the current aisle as uncovered. |
-| `TurnDue` | condition | True once per leg, when the row end is within 5 m. |
-
-Everything else is Nav2's: `ComputePathToPose`, `GetPoseFromPath`,
-`ConcatenatePaths`, `TruncatePath`, `FollowPath`, `PipelineSequence`,
-`RecoveryNode`, `ClearEntireCostmap`, `BackUp`.
-
-```
-ForceSuccess
-└── KeepRunningUntilFailure
-    └── Sequence  "leg"
-        ├── NextLeg  → row_goal, turn_goal, has_turn, aisle
-        └── Fallback  "drive_or_write_off"
-            ├── Sequence  "drive_the_leg"
-            │   ├── ComputePathToPose  goal=row_goal  planner=GridBased  → row_path
-            │   ├── TruncatePath  row_path → path   (distance=0.0, a stock copy)
-            │   └── PipelineSequence  "row_then_turn"
-            │       ├── Fallback
-            │       │   ├── Inverter → TurnDue(path, 5.0, has_turn)
-            │       │   └── Sequence  "plan_the_turn"
-            │       │       ├── GetPoseFromPath  row_path, index=-1  → row_end
-            │       │       ├── Fallback
-            │       │       │   ├── ComputePathToPose  start=row_end  planner=Headland
-            │       │       │   └── ComputePathToPose  start=row_end  planner=GridBased
-            │       │       └── ConcatenatePaths  row_path + turn_path → path
-            │       └── FollowPath  path
-            └── Sequence  "write_off_and_recover"
-                ├── MissedLeg
-                ├── ClearEntireCostmap  local
-                ├── ClearEntireCostmap  global
-                └── ForceSuccess → BackUp 2.5 m
-```
-
-### Why the machine never stops between rows
-
-`PipelineSequence` ticks its children in order and keeps ticking earlier ones
-while a later one is RUNNING. So `FollowPath` starts driving the row
-immediately; five metres from the row end `TurnDue` fires; the headland turn is
-planned from the row's *last pose* and **concatenated onto the same path**; and
-`FollowPath` — which has a port on `{path}` — picks up the extended path on its
-next tick without ever being halted. There is no new goal and no stop.
-
-`ReactiveSequence` would be the intuitive choice and is wrong: BT.CPP 4 throws
-if more than one child of a `ReactiveSequence` returns RUNNING. `PipelineSequence`
-is what Nav2's own
-`navigate_to_pose_w_replanning_and_recovery.xml` uses for exactly this shape.
-
-`SingleTrigger` was evaluated for the once-per-leg behaviour and rejected: a
-`Fallback` resets its children when it returns SUCCESS, which rearms the trigger
-on every tick. Hence `TurnDue` latches internally on the leg index.
-
-### The two `ForceSuccess` decorators
-
-They are not the same thing and only one of them survived.
-
-**The outer one is correct and stays.** `NextLeg` returns FAILURE when the
-aisles run out — that *is* the loop's exit condition, and
-`KeepRunningUntilFailure` propagates it. Without `ForceSuccess` the action would
-report ABORTED at the end of a mission that completed perfectly. It converts
-"finished" into "succeeded", which is exactly what it means.
-
-**The inner one was a bug and is gone.** It wrapped `plan_the_turn`, with the
-intent "if no headland turn fits, don't lose the aisle — finish the row and let
-the next leg's search planner find its own way round". What it actually did was
-*destroy the information that no turn had been planned*. The tree then behaved
-identically in both cases: `{path}` stayed the bare row, the machine drove to
-the row end and stopped, and the leg reported success. The next leg then asked
-Smac to plan out of a pose the geometric planner had just declared impossible to
-turn from. Smac obliged — it checks the costmap, not the vehicle's swept
-manoeuvre — the tracker refused to drive the result, and the run wedged for
-**six consecutive legs**. One unfittable turn cost six aisles.
-
-The replacement is a `Fallback` between two planners rather than a decorator
-that hides the answer:
-
-```xml
-<Fallback>
-  <ComputePathToPose ... planner_id="Headland"/>
-  <ComputePathToPose ... planner_id="GridBased"/>
-</Fallback>
-```
-
-Geometry first, because it answers in well under a millisecond and lands the row
-centre. Where geometry will not fit, the search planner gets the **same start
-and the same goal** and is free to reverse. Either way the result is
-concatenated and the machine keeps moving. Only if *both* fail does the branch
-fail — and then it fails loudly into the write-off branch, one leg lost instead
-of six.
-
-The general lesson: **`ForceSuccess` is right when failure is a valid terminal
-state, and wrong when failure is information the rest of the tree needs.**
-
----
-
-## 9. The geofence
+## 7. The geofence
 
 An autonomous machine in a real orchard must not leave the block, whatever the
 planner thinks. This is a policy boundary, not a perception result, so it is a
@@ -736,7 +501,7 @@ SERVERS = ['filter_mask_server', 'costmap_filter_info_server',
 
 ---
 
-## 10. Results
+## 8. Results
 
 Single runs against O3DE with real trees and real physics. The harness is not
 reproducible to the decimal place — the simulator steps on a wall-clock timer
@@ -780,9 +545,12 @@ thing to smooth.
 
 ---
 
-## 11. Five bugs only a real simulator finds
+## 9. Bugs only a real simulator finds
 
-Every one of these passed unit tests.
+Every one of these passed unit tests. Three of them live in
+[control](control.md), one in the planner above and one in
+[mission planning](mission-planning.md) — which is the point: none of them is a
+subsystem being wrong on its own.
 
 1. **Vetoing on cost 253.** `INSCRIBED_INFLATED_OBSTACLE` is inflation, not an
    obstacle. In a corridor barely wider than twice the inflation radius, this
@@ -817,39 +585,9 @@ And two environment traps worth writing down:
 
 ---
 
-## 12. Running it
+## 10. Running it
 
-```bash
-export KRAKEN_ROOT=... O3DE_HOME=...
+See [getting started §4](getting-started.md#4-the-orchard-coverage-run) for the
+full O3DE bringup, and §5 there for the unit tests, which need no simulator and
+no GPU.
 
-# Always start a fresh simulator. Spawning into a running one stacks a second
-# robot on the same point and they collide.
-docker rm -f kraken_ns
-docker compose -f docker/docker-compose.yml run --rm -d --name kraken_ns sim \
-  /o3de/ROSConDemo/Project/build/linux/bin/profile/ROSConDemo.GameLauncher
-
-docker compose -f docker/docker-compose.yml run --rm --entrypoint bash stack -c '
-  source /opt/ros/$ROS_DISTRO/setup.bash && cd $KRAKEN_WS
-  colcon build --packages-select kraken_interfaces kraken_nav kraken_scenarios
-  source install/setup.bash
-  ros2 run kraken_scenarios sim_admin spawn line1 kraken1
-  ros2 launch kraken_nav orchard.launch.py namespace:=kraken1 localisation:=ekf &
-  sleep 55
-  ros2 action send_goal /kraken1/cover_rows kraken_interfaces/action/CoverRows \
-    "{aisles: 18, aisle_pitch: 3.5, aisle_skip: 0,
-      row_near_x: 3.0, row_far_x: 43.0, row_heading_deg: -90.0}"'
-```
-
-To watch it, on the **host** first:
-
-```bash
-xhost +local:
-docker compose -f docker/docker-compose.yml run --rm viz
-```
-
-Unit tests, which need no simulator and no GPU:
-
-```bash
-colcon test --packages-select kraken_nav      # 12 tests
-python3 docs/figures/make_figures.py          # asserts against the same table
-```

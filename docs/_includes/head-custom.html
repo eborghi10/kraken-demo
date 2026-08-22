@@ -8,6 +8,17 @@
   };
 </script>
 <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({startOnLoad: false});
+  for (const block of document.querySelectorAll('pre > code.language-mermaid')) {
+    const figure = document.createElement('div');
+    figure.className = 'mermaid';
+    figure.textContent = block.textContent;
+    block.parentElement.replaceWith(figure);
+  }
+  await mermaid.run();
+</script>
 <style>
   .page-header { background-image: linear-gradient(120deg, #0b6e4f, #1b2a41); }
   main img { max-width: 100%; background: #fff; }

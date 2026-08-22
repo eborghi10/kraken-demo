@@ -100,13 +100,23 @@ makes the comparison a measurement rather than a claim. If someone changes the
 stack so the naive profile stops diverging, `gnss_dropout_naive` goes red and
 tells them the demo no longer demonstrates anything.
 
-## Why Nav2 runs without a costmap layer
+## Why Nav2 runs without a map
 
-`kraken_nav` wires Smac Hybrid-A* to MPPI on top of the same filter output the
-scenarios measure. There is no ranging sensor anywhere in this repo, so there is
-nothing to build an obstacle layer from: both costmaps are rolling windows of
-empty space, there is no map server, and MPPI runs without `CostCritic`. It
-demonstrates the interface and the control loop, not obstacle avoidance.
+`kraken_nav` wires Smac Hybrid-A* to a curvature-following controller on top of
+the same filter output the scenarios measure. Obstacles come from one source:
+the lidar the O3DE Kraken carries, read by an `ObstacleLayer` on both costmaps.
+The headless kinematic model has no ranging sensor, so against it that layer
+never receives an observation, the costmaps stay empty and what the scenarios
+exercise is the interface and the control loop rather than obstacle avoidance.
+
+There is no map server and no static layer either way. Both costmaps are
+rolling windows, so the world is remembered only as far back as the window
+reaches, and the only prior the machine is given is the geofence — a costmap
+filter rather than a layer, because it is a boundary set for it and not
+something it senses. Structure inside a row is measured rather than mapped:
+`kraken_orchard` fits a line to the trunks either side out of the same cloud
+and publishes the corridor between them, which needs no estimate of where the
+robot is in the world.
 
 It is wired to the flat headless model first, so the plumbing is verified
 independently of terrain. `minimum_turning_radius` is a smoothness choice rather
@@ -228,7 +238,8 @@ reproducible of the three, and that fixing the estimate had stabilised the
 controller without touching it. Re-measuring after the controller was given the
 robot's real kinematics reversed that: the unaided slippery case is now the
 tightest of the three, at 0.26 s and 0.05 m. The thrashing was never the
-estimate's doing. It was MPPI planning for a robot that could pivot.
+estimate's doing. It was the controller of the day, MPPI, planning for a robot
+that could pivot.
 
 ### Why the radar replaces the wheels rather than joining them
 
@@ -257,13 +268,16 @@ removes one and adds one, and the pairing is the point.
 The localisation scenarios run at `real_time_factor: 3.0`. The navigation ones
 run at 1.0, and the difference is not a preference.
 
-Nav2's controller optimises in wall time while the simulator advances sim time,
-so running the clock three times fast gives MPPI a third of the compute per
-simulated second. Open-loop scenarios do not notice, because nothing in them
-reacts to the result. A closed loop does. On flat ground it survives, because
+Nav2's controller runs in wall time while the simulator advances sim time, so
+running the clock three times fast gives it a third of the compute per simulated
+second. Open-loop scenarios do not notice, because nothing in them reacts to the
+result. A closed loop does. It was measured under MPPI, which optimises by
+sampling rollouts and so felt it hardest — on flat ground it survived, because
 tracking a plan that works needs little search; under slip, where every rollout
-mispredicts, it does not, and the scenario becomes a measurement of the host's
-spare CPU.
+mispredicts, it did not, and the scenario became a measurement of the host's
+spare CPU. The controller has since been replaced by `ArcTracker`, which is
+cheap, but the clock stays at 1.0 for closed-loop runs: the coupling is the
+point, not the particular controller.
 
 This was found by accident. Adding the radar added two publishers, which was
 enough extra load to change `nav_terrain_dropout` from a tight 5.32 +/- 0.13 m

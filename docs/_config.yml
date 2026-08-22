@@ -1,5 +1,5 @@
-title: Kraken Orchard Navigation
-description: Complete coverage of an orchard with an Ackermann robot, inside Nav2
+title: Kraken Autonomy Stack
+description: Localisation, navigation, control and mission planning for an Ackermann orchard robot
 theme: jekyll-theme-cayman
 
 exclude:
