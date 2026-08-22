@@ -29,6 +29,10 @@ set -euo pipefail
 
 ROSCON_REPO="${ROSCON_REPO:-https://github.com/o3de/ROSConDemo.git}"
 ROSCON_ROOT="${ROSCON_ROOT:-/o3de/ROSConDemo}"
+# The demo's default branch is quiet, so this is about being able to rebuild a
+# given result rather than about daily churn. Set it to the SHA this script
+# prints when it finishes. Same contract as O3DE_COMMIT in o3de-setup.sh.
+ROSCON_COMMIT="${ROSCON_COMMIT:-}"
 BUILD_CONFIG="${BUILD_CONFIG:-profile}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # playground is the small level with two Krakens already placed; main is the
@@ -63,6 +67,10 @@ else
     # The orchard art is ~1.4 GB of LFS objects. Without them the level opens
     # to missing-asset placeholders rather than an orchard.
     git clone "${ROSCON_REPO}" "${ROSCON_ROOT}"
+    # Before the LFS pull, so the objects fetched are the ones this commit names.
+    if [[ -n "${ROSCON_COMMIT}" ]]; then
+        git -C "${ROSCON_ROOT}" checkout --detach "${ROSCON_COMMIT}"
+    fi
     git -C "${ROSCON_ROOT}" lfs install
     git -C "${ROSCON_ROOT}" lfs pull
 fi
@@ -456,6 +464,12 @@ cmake --build build/linux --config "${BUILD_CONFIG}" \
 cat <<EOF
 
 Done.
+
+Built from:
+
+  ROSCON_COMMIT=$(git -C "${ROSCON_ROOT}" rev-parse HEAD)
+
+Set that in the environment to rebuild this exact checkout later.
 
   Editor:   ${PROJECT}/build/linux/bin/${BUILD_CONFIG}/Editor
   Launcher: ${PROJECT}/build/linux/bin/${BUILD_CONFIG}/ROSConDemo.GameLauncher -LoadLevel=playground

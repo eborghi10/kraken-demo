@@ -74,6 +74,11 @@ each step is skipped if its output exists, so a re-run after a failure resumes
 rather than restarting. It checks for a Vulkan device before starting, because
 Atom is Vulkan-only and would otherwise build for hours and then refuse to run.
 
+The engine's default branch is `development`, which moves. Both `o3de-setup.sh`
+and `roscondemo-setup.sh` print the commit they built from when they finish; set
+`O3DE_COMMIT`, `O3DE_EXTRAS_COMMIT` and `ROSCON_COMMIT` from that output to get
+the same tree back later. Unset, they take whatever the branch holds that day.
+
 Requires the [NVIDIA container toolkit][nvidia]. Pass `NVIDIA_DRIVER_CAPABILITIES=all`,
 not just `--gpus all`: the latter grants only `compute,utility`, and Vulkan needs
 `graphics`. [`rocker`][rocker] handles X11 and the GPU flags for you:
