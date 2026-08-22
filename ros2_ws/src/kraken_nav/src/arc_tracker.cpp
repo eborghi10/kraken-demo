@@ -61,7 +61,10 @@ void ArcTracker::configure(
   // The row and the turn appended to it arrive here as one path and nowhere
   // else, so this is the only place the mission is visible as the machine
   // understands it.
-  plan_publisher_ = node->create_publisher<nav_msgs::msg::Path>("mission_plan", 1);
+  // Transient local so an rviz started mid-mission sees the current leg rather
+  // than an empty display until the next one is planned.
+  plan_publisher_ = node->create_publisher<nav_msgs::msg::Path>(
+    "mission_plan", rclcpp::QoS(1).transient_local());
 }
 
 void ArcTracker::cleanup()
