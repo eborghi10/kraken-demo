@@ -15,7 +15,10 @@ from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
-SERVERS = ['controller_server', 'planner_server', 'behavior_server', 'bt_navigator']
+# The two filter servers come first: a costmap that is told to run a keepout
+# filter will wait for the mask before it will activate.
+SERVERS = ['filter_mask_server', 'costmap_filter_info_server',
+           'controller_server', 'planner_server', 'behavior_server', 'bt_navigator']
 
 # Frames that belong to one robot. `map` is shared and stays as it is.
 ROBOT_FRAMES = ('odom', 'base_link')
@@ -44,7 +47,8 @@ def _namespaced_params(source, namespace, prefix):
                 walk(value)
             elif key.endswith('frame') and value in ROBOT_FRAMES:
                 node[key] = prefix + value
-            elif key == 'topic' and isinstance(value, str) and not value.startswith('/'):
+            elif key in ('topic', 'filter_info_topic') and isinstance(value, str) \
+                    and not value.startswith('/'):
                 node[key] = '/'.join(('', namespace, value)) if namespace else '/' + value
 
     walk(params)
@@ -81,7 +85,30 @@ def _nodes(context):
     # have to be launched into the namespace its keys were written for.
     remappings = [('odometry/filtered', LaunchConfiguration('odom_topic').perform(context))]
 
-    return [
+    # A keepout mask is served exactly like a map, and a second little server
+    # tells the costmap filters how to read it. Both topics have to be absolute:
+    # the filter subscribes to the mask under whatever name the info message
+    # carries, and it does so from the costmap node, which sits one level below
+    # the robot. Left relative it looks for <ns>/global_costmap/... and waits
+    # for a publisher that will never appear.
+    mask = os.path.join(
+        get_package_share_directory('kraken_nav'), 'maps', 'orchard_keepout.yaml')
+    mask_topic = '/'.join(('', namespace, 'keepout_filter_mask')) if namespace \
+        else '/keepout_filter_mask'
+    filters = [
+        Node(package='nav2_map_server', executable='map_server', name='filter_mask_server',
+             namespace=namespace, output='screen',
+             parameters=[use_sim_time,
+                         {'yaml_filename': mask, 'topic_name': mask_topic}]),
+        Node(package='nav2_map_server', executable='costmap_filter_info_server',
+             name='costmap_filter_info_server', namespace=namespace, output='screen',
+             parameters=[use_sim_time,
+                         {'type': 0, 'filter_info_topic': 'costmap_filter_info',
+                          'mask_topic': mask_topic,
+                          'base': 0.0, 'multiplier': 1.0}]),
+    ]
+
+    return filters + [
         Node(package='nav2_controller', executable='controller_server', name='controller_server',
              namespace=namespace, output='screen', parameters=[params, use_sim_time],
              remappings=remappings),

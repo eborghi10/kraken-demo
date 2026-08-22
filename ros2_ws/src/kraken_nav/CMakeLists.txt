@@ -73,7 +73,7 @@ install(TARGETS kraken_nav_plugins kraken_cover_rows_bt_nodes
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin)
 install(DIRECTORY include/ DESTINATION include)
-install(DIRECTORY behavior_trees config launch rviz DESTINATION share/${PROJECT_NAME})
+install(DIRECTORY behavior_trees config launch maps rviz DESTINATION share/${PROJECT_NAME})
 install(FILES plugins.xml DESTINATION share/${PROJECT_NAME})
 
 if(BUILD_TESTING)

@@ -48,7 +48,7 @@ RUN apt-get update \
         ros-${ROS_DISTRO}-nav2-bt-navigator \
         ros-${ROS_DISTRO}-nav2-controller \
         ros-${ROS_DISTRO}-nav2-lifecycle-manager \
-        ros-${ROS_DISTRO}-nav2-mppi-controller \
+        ros-${ROS_DISTRO}-nav2-map-server \
         ros-${ROS_DISTRO}-nav2-planner \
         ros-${ROS_DISTRO}-nav2-smac-planner \
         ros-${ROS_DISTRO}-launch-testing \

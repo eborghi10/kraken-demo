@@ -150,6 +150,13 @@ local_costmap:
       # behind it and 2.5 m ahead, and the tyres are the widest point at 0.45 m.
       footprint: "[ [2.5, 0.45], [2.5, -0.45], [-0.6, -0.45], [-0.6, 0.45] ]"
       plugins: ["obstacle_layer", "inflation_layer"]
+      # The geofence. A filter rather than a layer because it is not something
+      # the machine senses and may re-evaluate; it is a boundary set for it.
+      filters: ["keepout_filter"]
+      keepout_filter:
+        plugin: "nav2_costmap_2d::KeepoutFilter"
+        enabled: true
+        filter_info_topic: costmap_filter_info
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: true
@@ -201,6 +208,11 @@ global_costmap:
       footprint: "[ [2.5, 0.45], [2.5, -0.45], [-0.6, -0.45], [-0.6, 0.45] ]"
       track_unknown_space: false
       plugins: ["obstacle_layer", "inflation_layer"]
+      filters: ["keepout_filter"]
+      keepout_filter:
+        plugin: "nav2_costmap_2d::KeepoutFilter"
+        enabled: true
+        filter_info_topic: costmap_filter_info
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: true
