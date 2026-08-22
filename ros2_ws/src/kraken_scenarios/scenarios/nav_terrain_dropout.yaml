@@ -33,8 +33,7 @@ phases:
 # SUCCEEDED in only 5 of 8 runs and requiring either value made the test flaky.
 # Once the controller was given the robot's real kinematics the outcome
 # settled: it now declares success in every run, 5.5 m from the goal. That is
-# the finding, and it is sharper for being reliable. MPPI assumes the commanded
-# velocity is achieved, so on slippery ground it mispredicts every rollout.
+# the finding, and it is sharper for being reliable.
 expect:
   expect_navigation_succeeded: 1.0
   max_goal_error_estimated: 0.6

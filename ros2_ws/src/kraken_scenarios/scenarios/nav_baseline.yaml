@@ -2,8 +2,9 @@ name: nav_baseline
 profile: robust
 seed: 0
 navigation: true
-# Nav2's controller optimises in wall time while the simulator advances sim
-# time, so running the clock fast gives MPPI less compute per simulated second.
+# Nav2's controller and costmaps run in wall time while the simulator advances
+# sim time, so running the clock fast gives the control loop less compute per
+# simulated second.
 # The localisation scenarios are open loop and do not care, but a closed loop
 # does: at 3x this scenario is stable only because flat ground is easy, and its
 # slippery siblings thrash. Real time everywhere the controller is in the loop.

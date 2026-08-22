@@ -1,6 +1,6 @@
 {
     "project_name": "KrakenDemo",
-    "display_name": "Kraken Localisation Robustness Demo",
+    "display_name": "Kraken Autonomy Stack",
     "license": "BSD-3-Clause",
     "origin": "https://github.com/o3de/ROSConDemo",
     "summary": "Sensor fault injection and localisation scoring for ROS 2, in O3DE.",

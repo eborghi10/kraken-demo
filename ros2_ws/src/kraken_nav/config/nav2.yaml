@@ -180,11 +180,11 @@ local_costmap:
         # An aisle is 3.5 m between trunk lines and the canopy closes it to a
         # corridor of roughly 3 m. Inflating by the footprint's 2.55 m
         # circumscribed radius leaves no uninflated cell anywhere in a row, so
-        # the robot would drive permanently in inflated cells and CostCritic
-        # could not tell a centred pose from a scraping one. 0.55 m leaves a
-        # ~1.9 m free band to aim at. Smac and MPPI both test the real
-        # footprint, so what this gives up is the cheap circumscribed-cost
-        # rejection ahead of that test, not the test.
+        # the robot would drive permanently in inflated cells and nothing
+        # downstream could tell a centred pose from a scraping one. 0.55 m
+        # leaves a ~1.9 m free band to aim at. Smac and ArcTracker both test
+        # the real footprint, so what this gives up is the cheap
+        # circumscribed-cost rejection ahead of that test, not the test.
         inflation_radius: 0.55
       always_send_full_costmap: true
 
