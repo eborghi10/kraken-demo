@@ -30,7 +30,12 @@
   // --gpus all requires nvidia-container-toolkit on the host; without it the
   // container will not start.
   "runArgs": ["--network=host", "--ipc=host", "--gpus", "all", "-v", "/tmp:/tmp"],
-  "mounts": ["source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind"],
+  // The gh config is bind-mounted rather than re-authenticated, so gh survives a
+  // rebuild. Writable because gh rewrites hosts.yml when a token refreshes.
+  "mounts": [
+    "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind",
+    "source=${localEnv:HOME}/.config/gh,target=/home/ubuntu/.config/gh,type=bind"
+  ],
   "containerEnv": {
     "DISPLAY": "${localEnv:DISPLAY}",
     // --gpus all alone grants only compute+utility; Vulkan/GLX need graphics.
