@@ -337,6 +337,15 @@ geometry_msgs::msg::TwistStamped ArcTracker::computeVelocityCommands(
   const double yaw = tf2::getYaw(robot.getRotation());
 
   advance(x, y);
+  // The cusp cap below parks the machine on a direction change, and advance()
+  // only steps forward off a point once it has been driven past, which a parked
+  // machine never does. Stepping over by hand is what makes the second leg of a
+  // three point turn start; without it the plan stalls on the cusp for good.
+  if (speed_ == 0.0 && index_ + 1 < plan_.size() &&
+    plan_[index_].reverse != plan_[index_ + 1].reverse)
+  {
+    ++index_;
+  }
   const auto & target = plan_[index_];
 
   const double across = -(x - target.x) * std::sin(target.heading) +

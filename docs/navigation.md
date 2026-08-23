@@ -547,7 +547,7 @@ thing to smooth.
 
 ## 9. Bugs only a real simulator finds
 
-Every one of these passed unit tests. Three of them live in
+Every one of these passed unit tests. Four of them live in
 [control](control.md), one in the planner above and one in
 [mission planning](mission-planning.md) — which is the point: none of them is a
 subsystem being wrong on its own.
@@ -572,6 +572,15 @@ subsystem being wrong on its own.
    condition kept re-firing as the machine drove into the turn, replanning ten
    times per leg under a controller already following it. *Fix: latch on the leg
    index.*
+
+6. **Parking on a cusp for good.** The controller must stop at a direction
+   change, and it walks the plan by dropping poses it has driven past — so at
+   the cusp it commands zero, never passes the pose, and holds zero. Both rules
+   are right on their own. *Symptom: a plan repeating unchanged every second
+   under a motionless robot, which reads exactly like a stuck planner. The
+   machine could not complete a three point turn anywhere, including the
+   headland turns laid out for it above. Fix: [step over the
+   cusp](control.md#stepping-over-a-cusp) once stopped on it.*
 
 And two environment traps worth writing down:
 

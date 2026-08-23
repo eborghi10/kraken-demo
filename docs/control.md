@@ -90,6 +90,52 @@ $$
 finally signed by the current segment's direction and rate-limited by
 $a_{\max}$.
 
+### Stepping over a cusp
+
+The cusp cap is exact where it bites: at the cusp itself $d_{\text{cusp}} = 0$,
+so $v = 0$. The tracker walks the plan by dropping poses the machine has driven
+*past*, which a stopped machine never does, so the target stays the cusp, the
+cap stays zero, and the leg is parked there for good. Nothing in the law above
+ever says *we have come to rest on the direction change, now take the next arc*.
+
+The signature is a plan that repeats **unchanged** every second while the
+odometry does not move —
+
+```
+31.8s  given 1.8 m of path in 14 poses, 1 direction changes
+...    byte-identical, 35 times over
+41.0s / 51.0s / 61.2s   Failed to make progress
+```
+
+— with the progress checker firing on a perfect 10 s cadence because that is
+`movement_time_allowance` counting down against a stationary robot. It is worth
+telling this apart from replan thrash, which it closely resembles from a
+distance: thrash gives a plan that changes every cycle, this gives one that
+never changes at all.
+
+So a machine at rest on a direction change is stepped over it by hand, onto the
+first pose of the next run:
+
+```cpp
+if (speed_ == 0.0 && plan_[index_].reverse != plan_[index_ + 1].reverse) {
+  ++index_;
+}
+```
+
+This is what makes the second leg of a three point turn begin, and until it was
+written the machine could not perform one at all — not unreliably, but never.
+The geometry was never the problem: [the headland
+planner](navigation.md#5-turning-at-the-headland) lays out a correct
+forward/reverse/forward turn, the reverse control law above drives a reverse arc
+correctly, and the machine parked on the cusp between them regardless.
+
+Over 15 seeds of
+[`nav_terrain_dropout_radar`](localisation.md#4-the-robustness-suite) it took
+the runs that never arrive from two to none — while driving *more* cusps, not
+fewer, which is the result worth trusting. Pricing reversals out through the
+planner's `reverse_penalty` suppresses the same symptom and costs the machine a
+manoeuvre it needs at the headland, so the penalty is left where it was.
+
 ---
 
 ## 4. Refusing to drive
@@ -136,7 +182,7 @@ still 5.5 m from the goal, which is the worse and more interesting result.
 
 ## 6. What went wrong here
 
-Three of the [five bugs only a real simulator
+Four of the [six bugs only a real simulator
 finds](navigation.md#9-bugs-only-a-real-simulator-finds) live in this file:
-vetoing on cost 253, flipping the wrong term in reverse, and reading arcs out of
-a pose list.
+vetoing on cost 253, flipping the wrong term in reverse, reading arcs out of
+a pose list, and parking on a cusp for good.
