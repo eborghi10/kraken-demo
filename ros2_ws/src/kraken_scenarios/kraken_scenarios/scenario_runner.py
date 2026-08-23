@@ -24,7 +24,9 @@ from rclpy.action import ActionClient
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
+from rclpy.time import Time
 from std_srvs.srv import Trigger
+from tf2_ros import Buffer, TransformListener
 
 from kraken_interfaces.msg import FaultSpec, LocalisationScore
 from kraken_interfaces.srv import SetFault
@@ -48,6 +50,7 @@ class ScenarioRunner(Node):
         self.declare_parameter('report', '')
         self.declare_parameter('command_rate_hz', 20.0)
         self.declare_parameter('startup_timeout_s', 120.0)
+        self.declare_parameter('base_frame', 'base_link')
 
         path = self.get_parameter('scenario').value
         if not path:
@@ -68,6 +71,8 @@ class ScenarioRunner(Node):
         self._set_fault = self.create_client(SetFault, 'fault_injector/set_fault')
         self._mark_reference = self.create_client(Trigger, 'scorer/mark_reference')
         self._navigate = ActionClient(self, NavigateToPose, 'navigate_to_pose')
+        self._tf_buffer = Buffer()
+        self._tf_listener = TransformListener(self._tf_buffer, self)
 
     def _on_score(self, msg):
         self._score = msg
@@ -112,6 +117,29 @@ class ScenarioRunner(Node):
             self._cmd_pub.publish(idle)
             self._rate.sleep()
         self.get_logger().info('localisation stack is up')
+
+    def _wait_for_nav(self, frame):
+        """Wait until Nav2 can place the robot, before any fault is injected.
+
+        A score message only says the filter is running. Nav2 also needs
+        `frame` -> base_link, and its costmaps pick that up a beat later. A goal
+        sent into that gap is rejected outright rather than driven and failed --
+        and because the GNSS cut happens in the phase before the drive, the fix
+        the datum needed is already gone, so the run can never recover. The gap
+        is a few hundred milliseconds idle and wide enough to lose every run
+        under load, which is what made this look like one flake in eight.
+        """
+        timeout = self.get_parameter('startup_timeout_s').value
+        base = self.get_parameter('base_frame').value
+        deadline = self.get_clock().now().nanoseconds * 1e-9 + timeout
+        idle = Twist()
+        while rclpy.ok() and not self._tf_buffer.can_transform(frame, base, Time()):
+            if self.get_clock().now().nanoseconds * 1e-9 > deadline:
+                raise RuntimeError('no %s -> %s transform in %.0f s'
+                                   % (frame, base, timeout))
+            self._cmd_pub.publish(idle)
+            self._rate.sleep()
+        self.get_logger().info('navigation stack is up')
 
     def _drive(self, seconds, linear, angular):
         command = Twist()
@@ -214,6 +242,11 @@ class ScenarioRunner(Node):
         self._rate = self.create_rate(self.get_parameter('command_rate_hz').value)
         self._wait_for_stack()
 
+        drives = [p for p in self.scenario['phases']
+                  if p.get('action') == 'navigate_to']
+        if drives:
+            self._wait_for_nav(drives[0].get('frame', 'map'))
+
         for phase in self.scenario['phases']:
             action = phase.get('action')
             label = phase.get('label', action or 'drive')
@@ -250,6 +283,12 @@ class ScenarioRunner(Node):
             'worst_heading_error_deg': math.degrees(score.worst_heading_error),
             'path_length': score.path_length,
             'path_rotation_deg': math.degrees(score.path_rotation),
+            'cross_track_error': score.cross_track_error,
+            'worst_cross_track_error': score.worst_cross_track_error,
+            'mean_cross_track_error': score.mean_cross_track_error,
+            'recovery_count': score.recovery_count,
+            'recovery_time_s': score.recovery_time,
+            'elapsed_time_s': score.elapsed_time,
         }
         if self._navigation is not None:
             report.update(self._navigation)

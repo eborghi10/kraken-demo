@@ -108,6 +108,16 @@ What each injector mode does to which channel is in
 [fault modes](faults.md). Thresholds live in the scenario files, each annotated
 with the distribution actually measured over a sweep.
 
+A goal is only sent once the stack can take one. Waiting for the first score
+message says localisation is up and says nothing about navigation, and the
+`nav_*` scenarios cut GNSS milliseconds before the goal goes out: if
+`navsat_transform` has not fixed a datum by then, `map → odom` never appears,
+the global costmap times out waiting for it, and Nav2 rejects the goal outright
+in about 16 ms. That reads as a navigation failure and is a race in the harness
+— roughly one run in eight, and every run under load. The runner now waits on
+the `map → base_link` transform itself before the first `navigate_to`, rather
+than on a proxy for it.
+
 ---
 
 ## 5. How a run is scored
