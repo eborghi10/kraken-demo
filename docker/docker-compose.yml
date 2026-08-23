@@ -9,7 +9,16 @@
 # devcontainer, where `..` is /data/workspace and does not exist on the host.
 # Driving compose from in there means pointing both of these at the host:
 #   export KRAKEN_ROOT=$HOME/kraken-demo O3DE_HOME=$HOME/o3de
+#
+# iceoryx scopes its shared memory to the group that created it, so every
+# container has to run as the same uid:gid as the host, or the cameras stop
+# working and the nodes abort. If yours is not 1000:1000, also:
+#   export USER_UID=$(id -u) USER_GID=$(id -g)
 name: kraken-demo
+
+x-user-args: &user-args
+  USER_UID: ${USER_UID:-1000}
+  USER_GID: ${USER_GID:-1000}
 
 services:
   # Light image: localisation, fault injection, headless sim, scenario tests.
@@ -17,15 +26,44 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile.Stack
+      args: *user-args
     image: kraken_stack
     network_mode: host
     ipc: host
+    depends_on: [roudi]
     volumes:
       - ${KRAKEN_ROOT:-..}/ros2_ws/src:/data/workspace/ros2_ws/src:ro
       - ${KRAKEN_ROOT:-..}/results:/data/workspace/results
+      # RouDi's registration socket is /tmp/roudi. ipc: host shares the segments
+      # in /dev/shm but not this, and the path is compiled into iceoryx.
+      - /tmp:/tmp
     working_dir: /data/workspace/ros2_ws
     stdin_open: true
     tty: true
+
+  # iceoryx's shared-memory broker. CycloneDDS hands camera frames over as
+  # shared segments rather than fragmenting 1.23 MB across the loopback socket,
+  # and this is what brokers them.
+  #
+  # It is a hard dependency of every service here, not just the ones that look
+  # at cameras: with SharedMemory enabled, a Cyclone participant that cannot
+  # reach RouDi waits 60 s and then aborts the process. There is no fallback to
+  # UDP. Hence depends_on everywhere and restart: unless-stopped here.
+  #
+  # Deliberately not merging *stack: that anchor depends_on this service, and
+  # inheriting it would make RouDi depend on itself.
+  roudi:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.Stack
+      args: *user-args
+    image: kraken_stack
+    network_mode: host
+    ipc: host
+    command: iox-roudi
+    restart: unless-stopped
+    volumes:
+      - /tmp:/tmp
 
   # One-shot: build then run the full scenario suite.
   test:
@@ -46,15 +84,18 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile.Viz
+      args: *user-args
     image: kraken_viz
     network_mode: host
     ipc: host
+    depends_on: [roudi]
     environment:
       - DISPLAY=${DISPLAY}
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=all
     volumes:
       - ${KRAKEN_ROOT:-..}/ros2_ws/src:/data/workspace/ros2_ws/src:ro
+      - /tmp:/tmp
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
     working_dir: /data/workspace
     stdin_open: true
@@ -70,9 +111,11 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile.Simulation
+      args: *user-args
     image: kraken_sim
     network_mode: host
     ipc: host
+    depends_on: [roudi]
     # A hung launcher is only diagnosable while it is still hung, and adding
     # this later means recreating the container, which throws the hang away.
     cap_add:
@@ -88,6 +131,7 @@ services:
       # here, not under /o3de. Without this the documented `run --rm` workflow
       # re-downloads them every time, so o3de-setup.sh is not resumable at all.
       - o3de_home:/home/ubuntu/.o3de
+      - /tmp:/tmp
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
     working_dir: /data/workspace
     deploy:

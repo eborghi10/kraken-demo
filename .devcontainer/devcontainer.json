@@ -15,6 +15,9 @@
   "workspaceMount": "source=${localWorkspaceFolder},target=/data/workspace,type=bind",
   "workspaceFolder": "/data/workspace",
   "remoteUser": "ubuntu",
+  // Default true; spelled out because iceoryx scopes its shared memory to the
+  // creating gid, so this container and the compose ones have to agree.
+  "updateRemoteUserUID": true,
 
   // Docker CLI talking to the host daemon, so the sim container can be built
   // and driven from in here. This grants root-equivalent access to the host.
@@ -26,7 +29,7 @@
   // so rviz2 and rqt_plot work.
   // --gpus all requires nvidia-container-toolkit on the host; without it the
   // container will not start.
-  "runArgs": ["--network=host", "--ipc=host", "--gpus", "all"],
+  "runArgs": ["--network=host", "--ipc=host", "--gpus", "all", "-v", "/tmp:/tmp"],
   "mounts": ["source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind"],
   "containerEnv": {
     "DISPLAY": "${localEnv:DISPLAY}",
@@ -36,6 +39,7 @@
   },
 
   "postCreateCommand": ".devcontainer/post-create.sh",
+  "postStartCommand": ".devcontainer/ensure-roudi.sh",
 
   "customizations": {
     "vscode": {

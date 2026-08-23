@@ -109,8 +109,23 @@ USER $USERNAME
 
 FROM base AS stack
 
+ARG USERNAME=ubuntu
+
+# Every container sharing iceoryx memory must run as the same uid:gid as the
+# devcontainer, or RouDi refuses the client at registration and it aborts.
+# updateRemoteUserUID covers only the devcontainer, and `--user` at run time is
+# not a substitute: RouDi names the segment after getgrgid(), so the gid has to
+# exist in /etc/group, which is what groupmod is for.
+ARG USER_UID=1000
+ARG USER_GID=1000
+RUN groupmod -o -g $USER_GID $USERNAME \
+    && usermod -o -u $USER_UID -g $USER_GID $USERNAME
+
 COPY ros2_ws/src $KRAKEN_WS/src
 
 RUN . /opt/ros/${ROS_DISTRO}/setup.sh \
     && cd $KRAKEN_WS \
-    && colcon build --symlink-install --event-handlers console_direct+
+    && colcon build --symlink-install --event-handlers console_direct+ \
+    && chown -R $USERNAME:$USERNAME $WORKSPACE
+
+USER $USERNAME

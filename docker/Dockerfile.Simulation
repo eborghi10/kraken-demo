@@ -84,8 +84,15 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # Files created in the bind mounts come back owned by whoever ran the build, so
-# build as uid 1000 rather than root. `ubuntu` already holds uid 1000 in Noble.
-RUN echo "$USERNAME ALL=(root) NOPASSWD:ALL" > /etc/sudoers.d/$USERNAME \
+# build as uid 1000 rather than root. `ubuntu` already holds uid 1000 in Noble,
+# but the gid is remapped too: iceoryx scopes its shared memory to the creating
+# group, so this must match the other images and the host. Declared here rather
+# than at the top so that changing them does not rebuild the apt layer.
+ARG USER_UID=1000
+ARG USER_GID=1000
+RUN groupmod -o -g $USER_GID $USERNAME \
+    && usermod -o -u $USER_UID -g $USER_GID $USERNAME \
+    && echo "$USERNAME ALL=(root) NOPASSWD:ALL" > /etc/sudoers.d/$USERNAME \
     && chmod 0440 /etc/sudoers.d/$USERNAME \
     && mkdir -p /o3de \
     && chown -R $USERNAME:$USERNAME /o3de

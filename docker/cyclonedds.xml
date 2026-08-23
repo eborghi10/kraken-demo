@@ -10,6 +10,45 @@
      with network_mode: host, so they share the loopback interface and unicast
      discovery over it is deterministic. Split them across machines and this
      needs relaxing.
+
+     The camera images are why the SharedMemory block is here. A 640x480 RGBA
+     frame is 1.23 MB against a default net.core.rmem_max of 208 kB (416 kB
+     once the kernel doubles it), and the publisher is BEST_EFFORT, so a
+     fragment lost to the overrun is never retransmitted and takes the whole
+     frame with it. Over UDP that measured camera_info at 12 Hz and image_color
+     at 0.95 Hz - same component, same tick, same call, so size was the only
+     variable, and nothing was logged.
+
+     Shared memory sidesteps the socket: frames are handed over as segments
+     brokered by iceoryx's RouDi, so there is no fragmentation, no socket
+     buffer and no kernel tuning. Measured on an untuned host, 640x480 RGBA
+     published at 12 Hz: 1.4 Hz received over UDP, 11.95 Hz over shared memory.
+     Tuning the host instead reaches the same 12 Hz, but it is invisible state
+     outside the repository, so a fresh machine silently reproduces the bug.
+
+     This needs RouDi running, plus `ipc: host` AND a shared /tmp on every
+     container that talks - the segments live in /dev/shm, which ipc: host
+     covers, but clients register over a socket at /tmp/roudi and that path is
+     compiled into iceoryx:
+         docker compose -f docker/docker-compose.yml up -d roudi
+     There is no fallback. A participant that cannot reach RouDi waits 60 s and
+     then aborts the process with IPC_INTERFACE__REG_ROUDI_NOT_AVAILABLE, and
+     that applies to every node using this config, not only the ones touching
+     cameras. Hence depends_on in the compose file and a postStart hook in the
+     devcontainer. The socket buffers below therefore never serve as a fallback
+     for the images; they still matter for everything else, and only bite if
+     the host has been tuned:
+         sudo sysctl -w net.core.rmem_max=16777216 net.core.wmem_max=16777216
+     `min` is a hard floor - Cyclone refuses to start if it cannot get it, and
+     the launcher exits with "failed to increase socket receive buffer size" -
+     so it stays low enough to always be satisfiable and the request goes in
+     `max`, which the kernel silently clamps.
+
+     Not done, both measured worse: MaxMessageSize=65500B to cut 686 fragments
+     per frame to 15 (image_color fell to 0.25 Hz - coarser datagrams overrun a
+     small buffer faster), and FastDDS, whose default 512 kB shared memory
+     segment is too small for a frame, so it silently falls back to UDP and
+     manages 1.0 Hz.
 -->
 <CycloneDDS xmlns="https://cdds.io/config">
   <Domain id="any">
@@ -21,5 +60,13 @@
       <ParticipantIndex>auto</ParticipantIndex>
       <Peers><Peer address="localhost"/></Peers>
     </Discovery>
+    <Internal>
+      <SocketReceiveBufferSize min="64 kB" max="16 MB"/>
+      <SocketSendBufferSize min="64 kB" max="16 MB"/>
+    </Internal>
+    <SharedMemory>
+      <Enable>true</Enable>
+      <LogLevel>warn</LogLevel>
+    </SharedMemory>
   </Domain>
 </CycloneDDS>

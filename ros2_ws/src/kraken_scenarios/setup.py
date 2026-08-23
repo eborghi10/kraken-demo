@@ -27,6 +27,7 @@ setup(
             'scorer = kraken_scenarios.scorer:main',
             'scenario_runner = kraken_scenarios.scenario_runner:main',
             'sim_admin = kraken_scenarios.sim_admin:main',
+            'sim_perf = kraken_scenarios.sim_perf:main',
             'sweep = kraken_scenarios.sweep:main',
         ],
     },
