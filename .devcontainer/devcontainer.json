@@ -38,13 +38,10 @@
     "NVIDIA_DRIVER_CAPABILITIES": "all"
   },
 
-  // gh keeps its token in the host keyring, which the container cannot reach, so
-  // it has to come in by hand: export GH_TOKEN in the shell that starts VS Code
-  // (`export GH_TOKEN=$(gh auth token)`). remoteEnv rather than containerEnv, so
-  // it stays out of `docker inspect`.
-  "remoteEnv": {
-    "GH_TOKEN": "${localEnv:GH_TOKEN}"
-  },
+  // gh needs no setup here: with no keyring in the container it falls back to a
+  // plaintext token in ~/.config/gh, so `gh auth login` once per rebuild is all
+  // it takes. Do not bind-mount the host's ~/.config/gh - the host does have a
+  // keyring, so that file holds no token and only shadows this one.
 
   "postCreateCommand": ".devcontainer/post-create.sh",
   "postStartCommand": ".devcontainer/ensure-roudi.sh",
