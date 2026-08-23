@@ -75,13 +75,15 @@ the flat case with heading error inside the bound the flat case passes, and a
 systematic bias.
 
 **`nav_terrain_dropout`** is what that costs you. Given a goal 12.65 m away over
-the same ground, the robot stops 5.5 m short and reports SUCCEEDED in 8 runs out
+the same ground, the robot stops 5.7 m short and reports SUCCEEDED in 8 runs out
 of 8, with the same believed goal error, the same clean heading and the same
 confident covariance as the control. Nav2 judges arrival from the estimate,
 because the estimate is all it has, so a bias in the estimate moves the finish
 line with it and cancels out of every number the robot can check about itself.
-A Doppler ground-speed radar is the fix, and the run then takes 64 s instead of
-23 — arriving late is what success looks like, and arriving on time is the lie.
+Cross-track error stays flat while it happens, which locates the failure: the
+robot drives the right line and simply stops short. A Doppler ground-speed radar
+is the fix, and the run then takes 34 s instead of 19 — arriving late is what
+success looks like, and arriving on time is the lie.
 
 The scenario table, the scoring rules and the numbers are in
 [docs/localisation.md](docs/localisation.md); the arguments behind them are in

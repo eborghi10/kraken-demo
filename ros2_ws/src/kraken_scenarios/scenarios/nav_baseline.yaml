@@ -19,15 +19,41 @@ phases:
   - {label: mark, action: mark_reference}
   - {label: goto, action: navigate_to, x: 12.0, y: 4.0, timeout: 120.0}
 
-# Measured over 8 seeds: goal_error_estimated 0.241 +/- 0.033 (max 0.289),
-# goal_error_true 0.292 +/- 0.034 (max 0.346), path_length 12.61 +/- 0.08,
-# navigation_time 22.73 +/- 0.22 s, succeeded 8/8.
+# Measured over 8 seeds: goal_error_estimated 0.583 +/- 0.029 (max 0.640),
+# goal_error_true 0.617 +/- 0.029 (max 0.664), path_length 12.17 +/- 0.04,
+# navigation_time 19.03 +/- 0.95 s, succeeded 8/8.
 #
-# max_goal_error_true is the bound that matters: on good ground the robot is
-# where it says it is, so belief and truth are held to the same tolerance.
+# Both goal errors sit just above the controller's 0.6 m xy_goal_tolerance,
+# which is the number that sets them: the goal checker stops the machine as
+# soon as it is inside that radius, so no bound tighter than the tolerance can
+# be met by construction. An earlier revision of this file recorded 0.241 and
+# 0.292 against a 0.25 m tolerance and bounds of 0.5; when the tolerance was
+# widened to 0.6 to stop a 3.1 m machine overshooting its own goal, the errors
+# followed it and the bounds did not.
+#
+# max_goal_error_true is still the bound that matters: on good ground the robot
+# is where it says it is, so belief and truth are held to the same tolerance.
+# What the pair asserts is that they agree, not that either is small.
 expect:
   expect_navigation_succeeded: 1.0
-  max_goal_error_estimated: 0.5
-  max_goal_error_true: 0.5
+  max_goal_error_estimated: 0.9
+  max_goal_error_true: 0.9
   max_position_error: 0.4
   min_path_length: 12.0
+  # Route quality, same 8 seeds: worst_cross_track_error 0.58 +/- 0.15 (max
+  # 0.90), mean_cross_track_error 0.25 +/- 0.08 (max 0.38), elapsed 19.0 +/-
+  # 1.0 s, and no recovery behaviour in any run. The lateral bounds are wide
+  # because the tracker cuts the corner the search planner rounds off; what
+  # they catch is a controller that crosses the aisle, not one that trims a
+  # turn.
+  max_cross_track_error: 1.5
+  max_mean_cross_track_error: 0.6
+  # Flat ground and a healthy fix: the navigator has little to recover from,
+  # and used nothing in 8 runs.
+  max_recovery_count: 2
+  # Loose on purpose. This runs at real_time_factor 1.0, so the controller gets
+  # whatever compute the machine has left; the same scenario took 19 s on an
+  # idle box and 27 s with the whole suite running beside it. The bound is a
+  # guard against the 120 s phase timeout, not a performance target - compare
+  # durations with the sweep tool, which runs one scenario at a time.
+  max_elapsed_time_s: 100.0

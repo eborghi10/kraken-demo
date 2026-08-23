@@ -30,6 +30,12 @@ METRICS = (
     'heading_error_deg',
     'path_length',
     'path_rotation_deg',
+    'elapsed_time_s',
+    'recovery_count',
+    'recovery_time_s',
+    # Zero unless a planner published a path, so open-loop scenarios report 0.
+    'worst_cross_track_error',
+    'mean_cross_track_error',
     # Only present for scenarios that navigate; summarise skips what is absent.
     'navigation_succeeded',
     'navigation_time_s',

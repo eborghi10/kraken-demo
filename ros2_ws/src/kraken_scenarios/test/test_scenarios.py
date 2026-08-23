@@ -47,6 +47,22 @@ CHECKS = {
     'min_position_error': ('worst_position_error', lambda got, want: got > want, 'above'),
     'min_path_length': ('path_length', lambda got, want: got > want, 'above'),
     'min_path_rotation_deg': ('path_rotation_deg', lambda got, want: got > want, 'above'),
+    # Route quality. Arriving is not the same as going the right way, so these
+    # are what fail a controller that wanders across the aisle and back.
+    'max_cross_track_error': (
+        'worst_cross_track_error', lambda got, want: got < want, 'below'),
+    'max_mean_cross_track_error': (
+        'mean_cross_track_error', lambda got, want: got < want, 'below'),
+    # Cost of getting there. A run that only finishes because the navigator
+    # backed up four times is a different result from one that drove straight
+    # through, and `elapsed_time_s` is what catches the slow crawl that neither
+    # trips the progress checker nor invokes a recovery.
+    'max_recovery_count': ('recovery_count', lambda got, want: got <= want, 'at most'),
+    'max_recovery_time_s': ('recovery_time_s', lambda got, want: got < want, 'below'),
+    'max_elapsed_time_s': ('elapsed_time_s', lambda got, want: got < want, 'below'),
+    # Finishing too fast is a result too: it means the obstacle the scenario
+    # placed was never actually encountered.
+    'min_elapsed_time_s': ('elapsed_time_s', lambda got, want: got > want, 'above'),
     # Navigation. `goal_error_estimated` is what the robot believes, and
     # `goal_error_true` is where it actually is; a scenario can require the two
     # to disagree, which is how a silent navigation failure gets asserted.

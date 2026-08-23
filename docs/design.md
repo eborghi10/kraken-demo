@@ -169,27 +169,39 @@ advances at the commanded speed while the robot advances at 45% of it. Over the
 
 | | flat, healthy fix | slippery, no fix | slippery, radar |
 | --- | --- | --- | --- |
-| `goal_error_estimated` | 0.241 +/- 0.033 | 0.239 +/- 0.006 | 0.357 +/- 0.032 |
-| `goal_error_true` | 0.292 +/- 0.034 | 5.494 +/- 0.023 | 0.297 +/- 0.057 |
-| `path_length` | 12.61 | 7.31 | 12.55 |
-| `navigation_time_s` | 22.73 | 22.81 | 63.68 |
-| Nav2 reported success | 8/8 | 8/8 | 8/8 |
+| `goal_error_estimated` | 0.583 +/- 0.029 | 0.587 +/- 0.010 | 0.77 +/- 0.07 |
+| `goal_error_true` | 0.617 +/- 0.029 | 5.658 +/- 0.026 | 0.75 +/- 0.08 |
+| `path_length` | 12.17 | 7.13 | 12.05 |
+| `elapsed_time_s` | 19.0 | 21.6 | 34.3 |
+| `worst_cross_track_error` | 0.58 +/- 0.15 | 0.59 +/- 0.23 | 0.40 +/- 0.13 |
+| `recovery_count` | 0/8 | 0/8 | 0/8 |
+| Nav2 reported success | 8/8 | 8/8 | 7/8 |
 
 These are the headless kinematic sim, which scales commanded velocity by a
 traction factor. O3DE gives real friction and load transfer instead, so the
 mechanism carries over but these magnitudes will not.
 
-Take the middle column first. The believed error is the same as the control's
-to well inside its own spread, and is if anything slightly smaller. The true
-error is 19x worse. Every signal available to the robot -- the goal check, the
-filter covariance, the encoders, the heading, which stays under 3 degrees --
-says the run went as well as the control run did. This is the second failure in
-this project that is invisible in heading and visible only in position; the
-first was the unobservable lateral velocity above, and both were found by
-scoring against ground truth rather than against the estimate.
+The absolute goal errors are set by the controller's 0.6 m `xy_goal_tolerance`,
+not by the filter. The goal checker stops the machine as soon as it is inside
+that radius, so ~0.6 m is the floor for every column and no bound tighter than
+the tolerance can be met. Read the columns against each other, not against zero.
 
-The spread is the other half of it. `goal_error_true` varies by 0.023 m across
-seeds, less than the flat case's 0.034 m, so the miss is not noise that a
+Take the middle column first. The believed error is the same as the control's
+to within a hundredth of a metre. The true error is 9x worse. Every signal
+available to the robot -- the goal check, the filter covariance, the encoders,
+the heading, which stays under 1 degree -- says the run went as well as the
+control run did. This is the second failure in this project that is invisible in
+heading and visible only in position; the first was the unobservable lateral
+velocity above, and both were found by scoring against ground truth rather than
+against the estimate.
+
+The cross-track row is what says *where* the failure is. It is flat across all
+three columns, so the slipping robot is not wandering: it drives the line it was
+given and simply does not get far enough along it. The failure is entirely
+along-track, which is why `goal_error_true` catches it and nothing lateral does.
+
+The spread is the other half of it. `goal_error_true` varies by 0.026 m across
+seeds, less than the flat case's 0.029 m, so the miss is not noise that a
 longer run would average out. It is a systematic bias, reproducible to the
 centimetre, which is what makes it dangerous rather than merely inaccurate.
 
@@ -207,6 +219,49 @@ was a differential drive: given the robot's real kinematics it settles, and now
 declares success in all 8 runs while 5.5 m from the goal. The finding survived
 the fix and got sharper, because a controller that reliably believes it arrived
 is worse news than one that sometimes gives up.
+
+## Why arriving is not the whole score
+
+Goal error is an endpoint measurement, and an endpoint measurement says nothing
+about the journey. A controller that crosses the aisle twice on the way and a
+controller that holds the centre line produce the same number, and in an
+orchard those are not the same run: the aisle is 3.5 m between trunk lines and
+the canopy closes it to about 3 m, so lateral excursions are what hit trees.
+Three metrics cover the gap.
+
+**Cross-track error** is the distance from ground truth to the path the planner
+laid down. The subtlety is which path. Nav2 replans continuously, and it plans
+from wherever the robot currently is, so the live plan is drawn *through* any
+wandering and measuring against it always reads near zero. The scorer therefore
+latches the first plan published for each goal and holds it, re-latching only
+when the plan's endpoint moves — a new goal, not a replan of the current one.
+
+Measuring truth against a plan expressed in the map frame conflates two things:
+how well the controller tracked, and how far the estimate had drifted. That is
+deliberate and it is the same choice `goal_error_true` makes. The question this
+metric answers is whether the machine physically went where the route said, not
+whether it thought it did.
+
+**Recovery count and time** come from the behaviour server's action status
+topics — `backup`, `drive_on_heading`, `wait`. Each invocation is the navigator
+admitting it is stuck, which is a cost that does not show up anywhere in goal
+error: a run that reaches the goal after backing up four times is a different
+result from one that drove straight through. Costmap clearing is a service call
+and leaves no trace on any topic, so it is not counted; the number is a floor
+on how much recovering happened, not a total.
+
+**Elapsed time** is measured from the reference mark rather than from the start
+of the navigation goal, so open-loop scenarios get a duration too. Its most
+useful form is a *lower* bound: `nav_terrain_dropout_radar` asserts that the run
+takes at least 25 s, because a run that crosses slippery ground as fast as the
+baseline crossed flat ground did not actually encounter the terrain, and no goal
+error would notice that the scenario had stopped testing anything.
+
+Upper time bounds are kept loose on purpose. These scenarios run at
+`real_time_factor: 1.0`, so the controller gets whatever compute is left over,
+and the same scenario measured 20 s on an idle machine and 69 s with the other
+nine running beside it. The bounds guard the phase timeout; the sweep tool,
+which runs one scenario at a time, is where durations are compared.
 
 ## Why there is a ground-speed radar
 
@@ -299,9 +354,16 @@ exactly zero across seeds.
   traction only: no slope, no load transfer, no lateral drift.
 - `Project/` builds and the Editor runs on the GPU, but no level is authored, so
   nothing yet drives the ROS 2 Gem from the O3DE side.
-- The navigation scenarios score a single goal at the end of the run. There is
-  no cross-track error along the path and no stuck-and-recovery metric, so a
-  controller that wanders badly but arrives still scores clean.
+- The navigation scenarios now score the path as well as the endpoint —
+  cross-track error, recovery count and elapsed time — but cross-track is
+  measured against the planner's own route, so it says whether the machine drove
+  the line it was given and not whether that line was a good one. Nothing scores
+  clearance to the trunk rows.
+- `nav_terrain_dropout_radar` fails to start in roughly one run in eight: the
+  goal returns in under a second with `path_length` 0.00. Reproduced across two
+  independent 8-seed sweeps, and unrelated to the terrain, which the other seeds
+  cross without trouble. `min_path_length` fails such a run, so the suite is
+  intermittently red here.
 - The radar corrects the bias but nothing reports it. Wheel speed minus radar
   speed is the slip ratio, which is a number a fruit picker could act on and is
   not published anywhere.

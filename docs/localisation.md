@@ -97,7 +97,7 @@ during it. Adding a failure mode is adding a file; no Python required.
 | `wheel_slip` | encoders report 2× the real motion | stays localised |
 | `terrain_dropout` | fix lost *and* the ground is slippery | **drifts 9.6 m** while heading stays under 3° |
 | `nav_baseline` | none, one Nav2 goal 12.65 m out | arrives, and is really there |
-| `nav_terrain_dropout` | the same goal, fix lost, ground slippery | **believes it arrived, is 5.3 m short** |
+| `nav_terrain_dropout` | the same goal, fix lost, ground slippery | **believes it arrived, is 5.7 m short** |
 | `nav_terrain_dropout_radar` | the same again, with a ground-speed radar | arrives late, and is really there |
 
 Four assert *failure* on purpose. `gnss_spoof` documents a real gap — the filter
@@ -128,6 +128,13 @@ Four decisions do most of the work, and each is argued in
   the estimate, because the estimate is all it has, so a bias in the estimate
   moves the finish line with it. The failure is not that either number is bad,
   it is that they disagree.
+- **The journey is scored, not just the endpoint.** `cross_track_error` measures
+  ground truth against the first plan laid down for each goal — the first,
+  because Nav2 replans from wherever the robot wandered to and the live plan
+  would hide the wandering. `recovery_count` counts the times the navigator fell
+  back on backing up or waiting. `elapsed_time_s` is what a run cost. Without
+  these a controller that crosses the aisle twice and one that holds the centre
+  line score identically.
 
 **Do not quote a single run.** The simulator steps on a wall-clock timer while
 the filter, injector and scorer consume its output over DDS, so the interleaving
@@ -146,17 +153,30 @@ to detect.
 
 | | flat, healthy fix | slippery, no fix | slippery, **radar** |
 | --- | --- | --- | --- |
-| distance to goal, **believed** | 0.241 m | 0.239 m | 0.357 m |
-| distance to goal, **true** | 0.292 m | **5.494 m** | **0.297 m** |
-| ground actually covered | 12.61 m | 7.31 m | 12.55 m |
-| time to goal | 22.7 s | 22.8 s | 63.7 s |
-| Nav2 reported success | 8/8 | 8/8 | 8/8 |
+| distance to goal, **believed** | 0.583 m | 0.587 m | 0.77 m |
+| distance to goal, **true** | 0.617 m | **5.658 m** | **0.75 m** |
+| ground actually covered | 12.17 m | 7.13 m | 12.05 m |
+| time to goal | 19.0 s | 21.6 s | 34.3 s |
+| worst cross-track error | 0.58 m | 0.59 m | 0.40 m |
+| recovery behaviours used | 0/8 | 0/8 | 0/8 |
+| Nav2 reported success | 8/8 | 8/8 | 7/8 |
 
-The robot's own account of the run is unchanged while it sits 5 m from where it
-was sent, and it reported SUCCEEDED in every run. The radar recovers it — and
-takes 64 s instead of 23, because the ground really is slippery and no sensor
+Eight seeds each. The absolute goal errors are set by the controller's 0.6 m
+`xy_goal_tolerance` — the goal checker halts the machine as soon as it is inside
+that radius — so read the columns against each other rather than against zero.
+
+The robot's own account of the run is unchanged while it sits 5.7 m from where
+it was sent, and it reported SUCCEEDED in every run. Cross-track is flat across
+all three columns, which locates the failure: the slipping robot is not
+wandering, it drives the right line and stops short. The radar recovers it — and
+takes 34 s instead of 19, because the ground really is slippery and no sensor
 changes that. **Arriving late is what success looks like here; arriving on time
 is the lie.**
+
+The radar column is 7/8 rather than 8/8 because roughly one seed in eight never
+leaves the start: the goal returns in under a second having covered 0.00 m. It
+reproduced across two independent sweeps and is listed in
+[known gaps](#7-known-gaps).
 
 ---
 
@@ -167,6 +187,10 @@ is the lie.**
   but `radar`. The stack has no cross-check that would fire.
 - Wheel speed minus radar speed is the slip ratio, a number a fruit picker could
   act on, and it is published nowhere.
+- `nav_terrain_dropout_radar` fails to start in roughly one run in eight. The
+  goal comes back in under a second with `path_length` 0.00, leaving the robot
+  the full 12.65 m from the goal. Reproduced in two independent 8-seed sweeps;
+  unrelated to the terrain, which the other seeds cross without trouble.
 
 The full list, with the reasoning behind each, is in
 [design](design.md#known-gaps).
