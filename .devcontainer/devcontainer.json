@@ -30,7 +30,12 @@
   // --gpus all requires nvidia-container-toolkit on the host; without it the
   // container will not start.
   "runArgs": ["--network=host", "--ipc=host", "--gpus", "all", "-v", "/tmp:/tmp"],
-  "mounts": ["source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind"],
+  "mounts": [
+    "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind",
+    // Copilot keeps its per-workspace memory under here, which otherwise lives
+    // in the container's writable layer and dies with every rebuild.
+    "source=kraken-demo-workspace-storage,target=/home/ubuntu/.vscode-server/data/User/workspaceStorage,type=volume"
+  ],
   "containerEnv": {
     "DISPLAY": "${localEnv:DISPLAY}",
     // --gpus all alone grants only compute+utility; Vulkan/GLX need graphics.

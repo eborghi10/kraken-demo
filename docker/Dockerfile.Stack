@@ -97,10 +97,14 @@ RUN apt-get update \
 
 # VS Code rewrites this user's uid/gid to match the host on first start, so
 # files created in the bind mount come back owned by you and not by root.
+# workspaceStorage is created here so that the named volume devcontainer.json
+# mounts over it inherits this ownership; a volume over a path absent from the
+# image would come out owned by root and be unwritable.
 RUN echo "$USERNAME ALL=(root) NOPASSWD:ALL" > /etc/sudoers.d/$USERNAME \
     && chmod 0440 /etc/sudoers.d/$USERNAME \
     && mkdir -p $KRAKEN_WS \
-    && chown -R $USERNAME:$USERNAME $WORKSPACE
+    && mkdir -p /home/$USERNAME/.vscode-server/data/User/workspaceStorage \
+    && chown -R $USERNAME:$USERNAME $WORKSPACE /home/$USERNAME/.vscode-server
 
 USER $USERNAME
 
